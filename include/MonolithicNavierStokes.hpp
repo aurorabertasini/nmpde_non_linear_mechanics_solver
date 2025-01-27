@@ -327,7 +327,7 @@ public:
         , mesh(MPI_COMM_WORLD)
         , reynolds_number(re_)
     {
-        this->nu = (2. * inlet_velocity.get_u_max() * 3. * cylinder_radius) / reynolds_number;
+        this->nu = (2./3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
     }
 
     // Initialization.

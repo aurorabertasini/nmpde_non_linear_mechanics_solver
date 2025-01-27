@@ -391,8 +391,7 @@ void MonolithicNavierStokes::solve()
         solve_time_step();
         compute_lift_drag();
 
-        if (time_step % 100 == 0)
-            output(time_step);
+        output(time_step);
     }
 }
 

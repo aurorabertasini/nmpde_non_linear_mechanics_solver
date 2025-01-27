@@ -1,5 +1,5 @@
 // Mesh size parameter
-lc = 0.02; // Adjust this value to refine or coarsen the mesh
+lc = 0.009; // Adjust this value to refine or coarsen the mesh
 
 // Define the outer rectangle points
 Point(1) = {0, 0, 0, 1.5 * lc};

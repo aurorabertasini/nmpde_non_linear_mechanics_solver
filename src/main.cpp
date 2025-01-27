@@ -112,8 +112,9 @@ int main(int argc, char *argv[])
     }
     case 7:
     {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
+        IncrementalChorinTemam incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        incrementalChorinTemam.run();
+        break;
     }
     case 8:
     {

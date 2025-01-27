@@ -134,7 +134,6 @@ void ChorinTemam::assemble_system_velocity()
     std::vector<types::global_dof_index> local_indices(dofs_per_cell);
 
     std::vector<Tensor<1, dim>> old_val(n_q);
-    std::vector<Tensor<2, dim>> old_grad(n_q);
     std::vector<double> old_div(n_q);
     std::vector<Tensor<1, dim>> old_old_val(n_q);
     std::vector<double> old_old_div(n_q);
@@ -151,7 +150,6 @@ void ChorinTemam::assemble_system_velocity()
 
         const auto &vel_extract = fe_values[FEValuesExtractors::Vector(0)];
         vel_extract.get_function_values(old_velocity, old_val);
-        vel_extract.get_function_gradients(old_velocity, old_grad);
         vel_extract.get_function_divergences(old_velocity, old_div);
         vel_extract.get_function_values(old_old_velocity, old_old_val);
         vel_extract.get_function_divergences(old_old_velocity, old_old_div);
@@ -181,7 +179,7 @@ void ChorinTemam::assemble_system_velocity()
                     // Viscous
                     lhs += 2.0 * deltat * nu * scalar_product(grad_phi_i, grad_phi_j);
                     // Convection
-                    lhs += 2.0 * deltat * scalar_product((u_star * grad_phi_j), phi_i);
+                    lhs += 2.0 * deltat * scalar_product((grad_phi_j * u_star), phi_i);
                     // Additional skew or slight correction
                     // lhs += 0.5 * (u_star_div * (phi_j * phi_i)); // !!!! maybe va modificato
 
@@ -260,7 +258,7 @@ void ChorinTemam::assemble_system_pressure()
     // We'll read velocity_solution for its divergence
     std::vector<double> div_u_star(n_q);
 
-    const double dt_inv = 1.0 / deltat;
+    const double dt_inv = 3.0 / (2.0 * deltat);
 
     auto cell_p = dof_handler_pressure.begin_active();
     auto cell_v = dof_handler_velocity.begin_active();
