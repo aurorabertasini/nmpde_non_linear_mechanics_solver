@@ -32,26 +32,25 @@ int main(int argc, char *argv[])
 
     double nu = (uM * cylinder_radius) / Re;
 
-    int choice;
+    int choice = 0;
 
     if (mpi_rank == 0)
-    {
+    {                // std::cout << "Div u_star: " << div_u_star[q] << std::endl;
+
         std::cout << "Please choose the problem to solve:" << std::endl;
         std::cout << "(1) Steady Navier-Stokesm Problem 2D" << std::endl;
         std::cout << "(2) Steady Navier-Stokesm Problem 3D" << std::endl;
         std::cout << "(3) Monolithic Time Dependent Navier-Stokesm Problem 2D" << std::endl;
         std::cout << "(4) Monolithic Time Dependent Navier-Stokesm Problem 3D" << std::endl;
-        std::cout << "(5) Chorin-Temam Time Dependent Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(6) Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
-        std::cout << "(7) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(8) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
+        std::cout << "(5) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 2D" << std::endl;
+        std::cout << "(6) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
         std::cout << std::endl;
         std::cout << "Enter your choice: ";
 
-        while (choice < 1 || choice > 8)
+        while (choice < 1 || choice > 6)
         {
             std::cin >> choice;
-            if (choice < 1 || choice > 8)
+            if (choice < 1 || choice > 6)
             {
                 std::cout << "Invalid choice. Please enter a valid choice: ";
             }
@@ -101,25 +100,16 @@ int main(int argc, char *argv[])
     }
     case 5:
     {
-        ChorinTemam chorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        chorinTemam.run();
+        IncrementalChorinTemam<2> incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        incrementalChorinTemam.run();
         break;
     }
     case 6:
     {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
-    }
-    case 7:
-    {
-        IncrementalChorinTemam incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        IncrementalChorinTemam<3> incrementalChorinTemam(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        std::cout << "Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
         incrementalChorinTemam.run();
-        break;
-    }
-    case 8:
-    {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
+        break; 
     }
 
         return 0;

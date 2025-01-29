@@ -1,6 +1,7 @@
 #include "../include/IncrementalChorinTemam.hpp"
 
-void IncrementalChorinTemam::setup()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::setup()
 {
 
     std::cout << "Initializing the mesh" << std::endl;
@@ -34,23 +35,44 @@ void IncrementalChorinTemam::setup()
     DoFTools::make_hanging_node_constraints(dof_handler_velocity, constraints_velocity);
 
     // Inlet velocity on boundary ID = 1:
-    VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                             /*boundary_id=*/1,
-                                             InletVelocity(H),
-                                             constraints_velocity);
+    if constexpr (dim == 2)
+    {
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/1,
+                                                 InletVelocity(H),
+                                                 constraints_velocity);
 
-    // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
-    VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                             /*boundary_id=*/3,
-                                             Functions::ZeroFunction<dim>(dim),
-                                             constraints_velocity);
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/3,
+                                                 Functions::ZeroFunction<dim>(dim),
+                                                 constraints_velocity);
 
-    // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
-    VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                             /*boundary_id=*/4,
-                                             Functions::ZeroFunction<dim>(dim),
-                                             constraints_velocity);
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/4,
+                                                 Functions::ZeroFunction<dim>(dim),
+                                                 constraints_velocity);
+    }
+    else if constexpr (dim == 3)
+    {
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/2,
+                                                 InletVelocity(H),
+                                                 constraints_velocity);
 
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/4,
+                                                 Functions::ZeroFunction<dim>(dim),
+                                                 constraints_velocity);
+
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/5,
+                                                 Functions::ZeroFunction<dim>(dim),
+                                                 constraints_velocity);
+    }
     constraints_velocity.close();
 
     //-----------------------------
@@ -64,11 +86,18 @@ void IncrementalChorinTemam::setup()
     constraints_pressure.clear();
     DoFTools::make_hanging_node_constraints(dof_handler_pressure, constraints_pressure);
     // Fix pressure=0 on boundary to remove nullspace
-    VectorTools::interpolate_boundary_values(
-        dof_handler_pressure,
-        2,
-        Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
-        constraints_pressure);
+    if constexpr (dim == 2)
+        VectorTools::interpolate_boundary_values(
+            dof_handler_pressure,
+            2,
+            Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
+            constraints_pressure);
+    else if constexpr (dim == 3)
+        VectorTools::interpolate_boundary_values(
+            dof_handler_pressure,
+            3,
+            Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
+            constraints_pressure);
     constraints_pressure.close();
 
     //-----------------------------
@@ -112,57 +141,8 @@ void IncrementalChorinTemam::setup()
               << ", pressure=" << dof_handler_pressure.n_dofs() << std::endl;
 }
 
-void IncrementalChorinTemam::intialize()
-{
-    // const unsigned int quad_deg = std::max<unsigned int>(2u, fe_velocity.degree + 1u);
-
-    // QGaussSimplex<dim> quadrature_formula(quad_deg);
-    // FEValues<dim> fe_values(fe_velocity, quadrature_formula,
-    //                         update_values | update_gradients |
-    //                             update_quadrature_points | update_JxW_values);
-
-    // const unsigned int dofs_per_cell = fe_velocity.dofs_per_cell;
-    // const unsigned int n_q = quadrature_formula.size();
-
-    // Vector<double> cell_u_star(dofs_per_cell);
-    // std::vector<types::global_dof_index> local_indices(dofs_per_cell);
-
-    // std::vector<Tensor<1, dim>> old_val(n_q);
-    // std::vector<Tensor<1, dim>> old_old_val(n_q);
-
-    // u_star = 0.0;
-
-    // for (const auto &cell : dof_handler_velocity.active_cell_iterators())
-    // {
-    //     if (!cell->is_locally_owned())
-    //         continue;
-
-    //     fe_values.reinit(cell);
-
-    //     cell_u_star = 0.0;
-
-    //     const auto &vel_extract = fe_values[FEValuesExtractors::Vector(0)];
-
-    //     vel_extract.get_function_values(old_velocity, old_val);
-    //     vel_extract.get_function_values(old_old_velocity, old_old_val);
-
-    //     for (unsigned int q = 0; q < n_q; ++q)
-    //     {
-
-    //         for (unsigned int i = 0; i < dofs_per_cell; ++i)
-    //         {
-    //             cell_u_star(i) = 2.0 * old_val[q] - old_old_val[q];
-    //         }
-    //     }
-
-    //     cell->get_dof_indices(local_indices);
-    //     constraints_velocity.distribute_local_to_global(cell_u_star, local_indices, u_star);
-
-    //     u_star.compress(VectorOperation::add);
-    // }
-}
-
-void IncrementalChorinTemam::assemble_system_velocity()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::assemble_system_velocity()
 {
     TimerOutput::Scope t(computing_timer, "assemble_velocity");
 
@@ -220,7 +200,7 @@ void IncrementalChorinTemam::assemble_system_velocity()
             const double JxW = fe_values.JxW(q);
 
             const Tensor<1, dim> &u_star = 2.0 * old_val[q] - old_old_val[q];
-            const double u_star_div = 2.0 * old_div[q] - old_old_div[q];.
+            const double u_star_div = 2.0 * old_div[q] - old_old_div[q];
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
@@ -242,7 +222,7 @@ void IncrementalChorinTemam::assemble_system_velocity()
 
                     cell_matrix(i, j) += lhs * JxW;
                 }
-                
+
                 cell_rhs(i) += scalar_product(4.0 * old_val[q], phi_i) * JxW;
                 cell_rhs(i) -= scalar_product(old_old_val[q], phi_i) * JxW;
                 cell_rhs(i) -= 2.0 * deltat * scalar_product(pressure_grad[q], phi_i) * JxW;
@@ -259,7 +239,8 @@ void IncrementalChorinTemam::assemble_system_velocity()
     velocity_system_rhs.compress(VectorOperation::add);
 }
 
-void IncrementalChorinTemam::solve_velocity_system()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::solve_velocity_system()
 {
     TimerOutput::Scope t(computing_timer, "solve_velocity");
 
@@ -285,8 +266,8 @@ void IncrementalChorinTemam::solve_velocity_system()
     // Update the global velocity solution:
     velocity_solution = tmp;
 }
-
-void IncrementalChorinTemam::assemble_system_pressure()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::assemble_system_pressure()
 {
 
     TimerOutput::Scope t(computing_timer, "assemble_pressure");
@@ -346,40 +327,12 @@ void IncrementalChorinTemam::assemble_system_pressure()
                 for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
                     const Tensor<1, dim> grad_j = fe_values_p.shape_grad(j, q);
-                    cell_matrix(i, j) += scalar_product(grad_j, grad_i) * JxW ;
+                    cell_matrix(i, j) += scalar_product(grad_j, grad_i) * JxW;
                 }
                 // RHS = - 1/dt * div(u^*) * phi_i
                 cell_rhs(i) -= 3.0 / (2.0 * deltat) * (div_u_star[q] * phi_i) * JxW;
-
-                // std::cout << "Div u_star: " << div_u_star[q] << std::endl;
             }
-        }
-        // Add Neumann boundary contributions for boundary 1
-        // for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
-        // {
-        //     if (cell_p->face(face)->at_boundary() && cell_p->face(face)->boundary_id() == 1)
-        //     {
-        //         fe_face_values.reinit(cell_p, face);
-        //         Vector<double> inlet_values(dim); // Store the inlet vector values at quadrature points
-
-        //         for (unsigned int q = 0; q < n_q_face; ++q)
-        //         {
-        //             const double JxW = fe_face_values.JxW(q);
-        //             const Point<dim> q_point = fe_face_values.quadrature_point(q);
-
-        //             // Evaluate the InletVelocity function at the quadrature point
-        //             // inlet_velocity.vector_value(q_point, inlet_values);
-
-        //             for (unsigned int i = 0; i < dofs_per_cell; ++i)
-        //             {
-        //                 const double phi_i = fe_face_values.shape_value(i, q);
-        //                 cell_rhs(i) += -inlet_values[0] * phi_i * JxW; // Use the x-component of the velocity
-        //             }
-        //         }
-        //     }
-        // }
-
-        // We might also add boundary integrals if needed for outflow, etc.
+        } // We might also add boundary integrals if needed for outflow, etc.
 
         cell_p->get_dof_indices(local_indices);
         constraints_pressure.distribute_local_to_global(cell_matrix, cell_rhs,
@@ -392,7 +345,8 @@ void IncrementalChorinTemam::assemble_system_pressure()
     pressure_system_rhs.compress(VectorOperation::add);
 }
 
-void IncrementalChorinTemam::solve_pressure_system()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::solve_pressure_system()
 {
     TimerOutput::Scope t(computing_timer, "solve_pressure");
 
@@ -411,7 +365,8 @@ void IncrementalChorinTemam::solve_pressure_system()
     deltap = tmp;
 }
 
-void IncrementalChorinTemam::update_velocity()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::update_velocity()
 {
     TimerOutput::Scope t(computing_timer, "assemble_update");
 
@@ -472,7 +427,7 @@ void IncrementalChorinTemam::update_velocity()
                     cell_matrix(i, j) += scalar_product(phi_i, phi_j) * JxW;
                 }
                 cell_rhs(i) += u_tilde_vals[q] * phi_i * JxW;
-                cell_rhs(i) -= (2.0/3.0) * deltat * grad_delta_p[q] * phi_i * JxW;
+                cell_rhs(i) -= (2.0 / 3.0) * deltat * grad_delta_p[q] * phi_i * JxW;
             }
         }
 
@@ -486,7 +441,8 @@ void IncrementalChorinTemam::update_velocity()
     velocity_update_rhs.compress(VectorOperation::add);
 }
 
-void IncrementalChorinTemam::solve_update_velocity_system()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::solve_update_velocity_system()
 {
 
     TimerOutput::Scope t(computing_timer, "solve_update");
@@ -512,7 +468,8 @@ void IncrementalChorinTemam::solve_update_velocity_system()
     update_velocity_solution = tmp;
 }
 
-void IncrementalChorinTemam::output_results()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::output_results()
 {
     DataOut<dim> data_out;
 
@@ -542,7 +499,8 @@ void IncrementalChorinTemam::output_results()
     data_out.write_vtk(out);
 }
 
-void IncrementalChorinTemam::run()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::run()
 {
     setup();
 
@@ -599,8 +557,7 @@ void IncrementalChorinTemam::run()
         pressure_solution.add(deltap);
 
         output_results();
-        compute_lift_drag();
-
+        // compute_lift_drag();
 
         // // Clear for next iteration
         // velocity_solution = 0;
@@ -609,7 +566,8 @@ void IncrementalChorinTemam::run()
     }
 }
 
-void IncrementalChorinTemam::compute_lift_drag()
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::compute_lift_drag()
 {
     // -------------------------------------------------
     // 1) Setup for face integration
@@ -814,23 +772,35 @@ void IncrementalChorinTemam::compute_lift_drag()
     }
 }
 
-std::string IncrementalChorinTemam::get_output_directory()
+template <unsigned int dim>
+std::string IncrementalChorinTemam<dim>::get_output_directory()
 {
 
     namespace fs = std::filesystem;
 
     if (!fs::exists("./outputs"))
-    {
         fs::create_directory("./outputs");
+    if constexpr (dim == 2)
+    {
+        if (!fs::exists("./outputs/IncrementalChorinTemam2D"))
+        {
+            fs::create_directory("./outputs/IncrementalChorinTemam2D");
+        }
+    }
+    else if constexpr (dim == 3)
+    {
+        if (!fs::exists("./outputs/IncrementalChorinTemam3D"))
+            fs::create_directory("./outputs/IncrementalChorinTemam3D");
     }
 
-    if (!fs::exists("./outputs/IncrementalChorinTemam"))
-    {
-        fs::create_directory("./outputs/IncrementalChorinTemam");
-    }
+    fs::path sub_dir_path = "";
 
     std::string sub_dir_name = "outputs_reynolds_" + std::to_string(static_cast<int>(reynolds_number));
-    fs::path sub_dir_path = "./outputs/IncrementalChorinTemam/" + sub_dir_name + "/";
+    if constexpr (dim == 2)
+        sub_dir_path = "./outputs/IncrementalChorinTemam2D/" + sub_dir_name + "/";
+    else if constexpr (dim == 3)
+        sub_dir_path = "./outputs/IncrementalChorinTemam3D/" + sub_dir_name + "/";
+
     if (!fs::exists(sub_dir_path))
     {
         fs::create_directory(sub_dir_path);
@@ -838,3 +808,6 @@ std::string IncrementalChorinTemam::get_output_directory()
 
     return sub_dir_path.string();
 }
+
+template class IncrementalChorinTemam<2>;
+template class IncrementalChorinTemam<3>;

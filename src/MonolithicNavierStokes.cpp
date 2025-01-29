@@ -316,7 +316,7 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
         std::map<types::global_dof_index, double> boundary_values;
         std::map<types::boundary_id, const Function<dim> *> boundary_functions;
 
-        boundary_functions[1] = &inlet_velocity;
+        boundary_functions[0] = &inlet_velocity;
         VectorTools::interpolate_boundary_values(dof_handler,
                                                  boundary_functions,
                                                  boundary_values,
@@ -325,8 +325,8 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
 
         boundary_functions.clear();
         Functions::ZeroFunction<dim> zero_function(dim + 1);
+        boundary_functions[2] = &zero_function;
         boundary_functions[3] = &zero_function;
-        boundary_functions[4] = &zero_function;
         VectorTools::interpolate_boundary_values(dof_handler,
                                                  boundary_functions,
                                                  boundary_values,

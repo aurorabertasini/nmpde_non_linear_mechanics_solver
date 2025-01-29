@@ -157,12 +157,10 @@
 
 using namespace dealii;
 
+template <unsigned int dim>
 class IncrementalChorinTemam
 {
 public:
-    // Physical dimension (1D, 2D, 3D)
-    static constexpr unsigned int dim = 2;
-
     class ForcingTerm : public Function<dim>
     {
     public:
@@ -183,7 +181,7 @@ public:
 
     protected:
     };
-
+    
     class InletVelocity : public Function<dim>
     {
     public:
@@ -191,14 +189,20 @@ public:
             : Function<dim>(dim)
         {
             this->H = H;
+            if constexpr (dim == 2)
+                this->uM = 1.5;
+            else
+                this->uM = 2.25;
         }
 
         virtual void
         vector_value(const Point<dim> &p, Vector<double> &values) const override
         {
-            values[0] = 4.0 * uM * p[1] * (H - p[1]) / (H * H);
-
-            for (unsigned int i = 1; i < dim + 1; ++i)
+            if constexpr (dim == 2)
+                values[0] = 4.0 * uM * p[1] * (H - p[1]) / (H * H);
+            else
+                values[0] = 16.0 * uM * p[1] * (H - p[1]) * p[2] * (H - p[2]) / (H * H * H * H);
+            for (unsigned int i = 1; i < dim; ++i)
                 values[i] = 0.0;
         }
 
@@ -206,7 +210,10 @@ public:
         value(const Point<dim> &p, const unsigned int component = 0) const override
         {
             if (component == 0)
-                return 4.0 * uM * p[1] * (H - p[1]) / (H * H);
+                if constexpr (dim == 2)
+                    return 4.0 * uM * p[1] * (H - p[1]) / (H * H);
+                else
+                    return 16.0 * uM * p[1] * (H - p[1]) * p[2] * (H - p[2]) / (H * H * H * H);
             else
                 return 0.0;
         }
@@ -217,7 +224,7 @@ public:
         }
 
     protected:
-        const double uM = 1.5;
+        double uM;
         double H;
     };
 
@@ -270,38 +277,14 @@ public:
         }
     };
 
-    IncrementalChorinTemam(
-        const std::string &mesh_file_name_,
-        const unsigned int &degree_velocity_,
-        const unsigned int &degree_pressure_,
-        const double &T_,
-        const double &deltat_,
-        const double &reynolds_number_)
-        : fe_velocity(FE_SimplexP<dim>(2), dim),
-          dof_handler_velocity(triangulation),
-          fe_pressure(1),
-          dof_handler_pressure(triangulation),
-          mesh_file_name(mesh_file_name_),
-          degree_velocity(degree_velocity_),
-          degree_pressure(degree_pressure_),
-          reynolds_number(reynolds_number_),
-          T(T_),
-          deltat(deltat_),
-          mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)),
-          mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)),
-          pcout(std::cout, mpi_rank == 0),
-          mesh(MPI_COMM_WORLD),
-          inlet_velocity(H),
-          computing_timer(MPI_COMM_WORLD, pcout,
-                          TimerOutput::summary,
-                          TimerOutput::wall_times)
-    {
-        this->nu = (2./3.) * uM * cylinder_radius / reynolds_number;
-    }
+    IncrementalChorinTemam(const std::string &mesh_file_name_,
+                           const unsigned int &degree_velocity_,
+                           const unsigned int &degree_pressure_,
+                           const double &T_,
+                           const double &deltat_,
+                           const double &reynolds_number_);
 
     void setup();
-
-    void intialize();
 
     void assemble_system_velocity();
 
@@ -374,8 +357,6 @@ private:
 
     const double reynolds_number;
 
-    const double uM = 1.5;
-
     const double cylinder_radius = 0.1;
 
     ConditionalOStream pcout;
@@ -418,3 +399,34 @@ private:
 
     const double rho = 1.0;
 };
+
+template <unsigned int dim>
+IncrementalChorinTemam<dim>::IncrementalChorinTemam(
+    const std::string &mesh_file_name_,
+    const unsigned int &degree_velocity_,
+    const unsigned int &degree_pressure_,
+    const double &T_,
+    const double &deltat_,
+    const double &reynolds_number_)
+    : fe_velocity(FE_SimplexP<dim>(2), dim),
+      dof_handler_velocity(triangulation),
+      fe_pressure(1),
+      dof_handler_pressure(triangulation),
+      mesh_file_name(mesh_file_name_),
+      degree_velocity(degree_velocity_),
+      degree_pressure(degree_pressure_),
+      reynolds_number(reynolds_number_),
+      T(T_),
+      deltat(deltat_),
+      mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)),
+      mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)),
+      pcout(std::cout, mpi_rank == 0),
+      mesh(MPI_COMM_WORLD),
+      inlet_velocity(H),
+      computing_timer(MPI_COMM_WORLD, pcout,
+                      TimerOutput::summary,
+                      TimerOutput::wall_times)
+{
+    std::cout << "Initializing the mesh" << std::endl;
+    this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
+}
