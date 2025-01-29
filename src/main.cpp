@@ -1,5 +1,4 @@
-#include "../include/Stokes.hpp"
-#include "../include/Incremental_stokes.hpp"
+#include "../include/SteadyNavierStokes.hpp"
 #include "../include/MonolithicNavierStokes.hpp"
 #include "../include/ChorinTemam.hpp"
 #include "../include/IncrementalChorinTemam.hpp"
@@ -65,26 +64,17 @@ int main(int argc, char *argv[])
     {
     case 1:
     {
-        std::cout << "Solving the Steady Navier-Stokesm Problem 2D" << std::endl;
-        Stokes stokes(mesh2DPath, degreeVelocity, degreePressure, Re);
-
-        stokes.setup();
-        stokes.assemble();
-        stokes.solve();
-        stokes.output();
-
-        IncrementalStokes incremental(mesh2DPath, degreeVelocity, degreePressure, Re);
-        incremental.set_initial_conditions(stokes.get_solution());
-        incremental.setup();
-        incremental.solve();
-        incremental.output();
-        incremental.compute_lift_drag();
+        if (mpi_rank == 0) std::cout << "Solving the Steady Navier-Stokesm Problem 2D" << std::endl;
+        SteadyNavierStokes<2> steadyNavierStokes2D(mesh2DPath, degreeVelocity, degreePressure , Re);
+        steadyNavierStokes2D.run_full_problem_pipeline();
         break;
     }
     case 2:
     {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
+        if (mpi_rank == 0) std::cout << "Solving the Steady Navier-Stokesm Problem 3D" << std::endl;
+        SteadyNavierStokes<3> steadyNavierStokes3D(mesh3DPath, degreeVelocity, degreePressure , Re);
+        steadyNavierStokes3D.run_full_problem_pipeline();
+        break;
     }
     case 3:
     {
