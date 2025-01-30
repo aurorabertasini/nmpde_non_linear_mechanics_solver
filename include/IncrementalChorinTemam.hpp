@@ -161,85 +161,75 @@ template <unsigned int dim>
 class IncrementalChorinTemam
 {
 public:
-    class ForcingTerm : public Function<dim>
+    class ForcingTerm2D : public Function<dim>
     {
     public:
         virtual void
-        vector_value(const Point<dim> & /*p*/,
+        vector_value(const Point<dim> &p,
                      Vector<double> &values) const override
         {
-            for (unsigned int i = 0; i < dim; ++i)
-                values[i] = 0.0;
+            double x = p[0];
+            double y = p[1];
+            double t = this->get_time();
+            values[0] = M_PI * (4.0 * M_PI * M_PI * pow(sin(t), 2) * pow(sin(M_PI * x), 3) * sin(M_PI * y) * cos(M_PI * x) + 16.0 * M_PI * M_PI * sin(t) * pow(sin(M_PI * x), 2) * cos(M_PI * y) - sin(t) * sin(M_PI * x) - 4.0 * M_PI * M_PI * sin(t) * cos(M_PI * y) + 2.0 * pow(sin(M_PI * x), 2) * cos(t) * cos(M_PI * y)) * sin(M_PI * y);
+
+            values[1] = M_PI * (4.0 * M_PI * M_PI * pow(sin(t), 2) * pow(sin(M_PI * x), 2) * pow(sin(M_PI * y), 3) * cos(M_PI * y) - 16.0 * M_PI * M_PI * sin(t) * sin(M_PI * x) * pow(sin(M_PI * y), 2) * cos(M_PI * x) + 4.0 * M_PI * M_PI * sin(t) * sin(M_PI * x) * cos(M_PI * x) + sin(t) * cos(M_PI * x) * cos(M_PI * y) - 2.0 * sin(M_PI * x) * pow(sin(M_PI * y), 2) * cos(t) * cos(M_PI * x));
         }
 
         virtual double
-        value(const Point<dim> & /*p*/,
-              const unsigned int /*component*/ = 0) const override
+        value(const Point<dim> &p,
+              const unsigned int component = 0) const override
         {
-            return 0.0;
+            double x = p[0];
+            double y = p[1];
+            double t = this->get_time();
+            if (component == 0)
+                return M_PI * (4.0 * M_PI * M_PI * pow(sin(t), 2) * pow(sin(M_PI * x), 3) * sin(M_PI * y) * cos(M_PI * x) + 16.0 * M_PI * M_PI * sin(t) * pow(sin(M_PI * x), 2) * cos(M_PI * y) - sin(t) * sin(M_PI * x) - 4.0 * M_PI * M_PI * sin(t) * cos(M_PI * y) + 2.0 * pow(sin(M_PI * x), 2) * cos(t) * cos(M_PI * y)) * sin(M_PI * y);
+            else if (component == 1)
+                return M_PI * (4.0 * M_PI * M_PI * pow(sin(t), 2) * pow(sin(M_PI * x), 2) * pow(sin(M_PI * y), 3) * cos(M_PI * y) - 16.0 * M_PI * M_PI * sin(t) * sin(M_PI * x) * pow(sin(M_PI * y), 2) * cos(M_PI * x) + 4.0 * M_PI * M_PI * sin(t) * sin(M_PI * x) * cos(M_PI * x) + sin(t) * cos(M_PI * x) * cos(M_PI * y) - 2.0 * sin(M_PI * x) * pow(sin(M_PI * y), 2) * cos(t) * cos(M_PI * x));
+            else
+                return 0.0;
         }
 
     protected:
     };
-
-    class InletVelocity : public Function<dim>
+    class ExactVelocity2D : public Function<dim>
     {
     public:
-        InletVelocity(const double H)
-            : Function<dim>(dim)
-        {
-            this->H = H;
-            if constexpr (dim == 2)
-                this->uM = 1.5;
-            else
-                this->uM = 2.25;
-        }
-
         virtual void
         vector_value(const Point<dim> &p, Vector<double> &values) const override
         {
-            if constexpr (dim == 2)
-                values[0] = 4.0 * uM * p[1] * (H - p[1]) / (H * H);
-            else
-                values[0] = 16.0 * uM * p[1] * (H - p[1]) * p[2] * (H - p[2]) / (H * H * H * H);
-            for (unsigned int i = 1; i < dim; ++i)
-                values[i] = 0.0;
+            double t = this->get_time();
+            // u_x = sp.pi * sp.sin(t) * sp.sin(2 * sp.pi * y) * sp.sin(sp.pi * x)**2
+            values[0] = M_PI * sin(t) * sin(2.0 * M_PI * p[1]) * pow(sin(M_PI * p[0]), 2);
+
+            // u_y = -sp.pi * sp.sin(t) * sp.sin(2 * sp.pi * x) * sp.sin(sp.pi * y)**2
+            values[1] = -M_PI * sin(t) * sin(2.0 * M_PI * p[0]) * pow(sin(M_PI * p[1]), 2);
         }
 
         virtual double
         value(const Point<dim> &p, const unsigned int component = 0) const override
         {
+            double t = this->get_time();
             if (component == 0)
-                if constexpr (dim == 2)
-                    return 4.0 * uM * p[1] * (H - p[1]) / (H * H);
-                else
-                    return 16.0 * uM * p[1] * (H - p[1]) * p[2] * (H - p[2]) / (H * H * H * H);
+                return M_PI * sin(t) * sin(2.0 * M_PI * p[1]) * pow(sin(M_PI * p[0]), 2);
+
+            else if (component == 1)
+                return -M_PI * sin(t) * sin(2.0 * M_PI * p[0]) * pow(sin(M_PI * p[1]), 2);
             else
                 return 0.0;
         }
-
-        double get_u_max() const
-        {
-            return uM;
-        }
-
-    protected:
-        double uM;
-        double H;
     };
 
-    class Function_Neumann : public Function<dim>
+    class ExactPressure2D : public Function<dim>
     {
     public:
-        Function_Neumann()
-            : Function<dim>(dim + 1)
-        {
-        }
-
         virtual void
         vector_value(const Point<dim> &p, Vector<double> &values) const override
         {
-            values[0] = 0.0;
+            // p=sp.sin(t) * sp.cos(sp.pi * x) * sp.sin(sp.pi * y)
+
+            values[0] = sin(this->get_time()) * cos(M_PI * p[0]) * sin(M_PI * p[1]);
 
             for (unsigned int i = 1; i < dim + 1; ++i)
                 values[i] = 0.0;
@@ -249,33 +239,12 @@ public:
         value(const Point<dim> &p, const unsigned int component = 0) const override
         {
             if (component == 0)
-                return 0.0;
+                return sin(this->get_time()) * cos(M_PI * p[0]) * sin(M_PI * p[1]);
             else
                 return 0.0;
         }
     };
 
-    class Function_u0 : public Function<dim>
-    {
-    public:
-        virtual void
-        vector_value(const Point<dim> &p, Vector<double> &values) const override
-        {
-            values[0] = 0.0;
-
-            for (unsigned int i = 1; i < dim + 1; ++i)
-                values[i] = 0.0;
-        }
-
-        virtual double
-        value(const Point<dim> &p, const unsigned int component = 0) const override
-        {
-            if (component == 0)
-                return 0.0;
-            else
-                return 0.0;
-        }
-    };
     class EthierSteinmanVelocity : public Function<dim>
     {
     public:
@@ -504,6 +473,8 @@ public:
 
     double compute_error(const VectorTools::NormType &norm_type);
 
+    void update_buondary_conditions();
+
 private:
     Triangulation<dim> triangulation;
 
@@ -549,7 +520,7 @@ private:
     double time = 0;
 
     // Viscosity
-    const double nu = 1. / 100.;
+    const double nu = 1.;
 
     unsigned int time_step = 0;
 
@@ -578,13 +549,17 @@ private:
 
     parallel::fullydistributed::Triangulation<dim> mesh;
 
-    InletVelocity inlet_velocity;
+    EthierSteinmanVelocity exact_velocity3D;
 
-    EthierSteinmanVelocity exact_velocity;
+    EthierSteinmanPressure exact_pressure3D;
 
-    EthierSteinmanPressure exact_pressure;
+    EthierSteinmanNeumann neumann_function3D;
 
-    EthierSteinmanNeumann neumann_function;
+    ExactVelocity2D exact_velocity2D;
+
+    ExactPressure2D exact_pressure2D;
+
+    ForcingTerm2D forcing_term2D;
 
     // Height of the channel.
     const double H = 0.41;
@@ -626,12 +601,11 @@ IncrementalChorinTemam<dim>::IncrementalChorinTemam(
       mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)),
       pcout(std::cout, mpi_rank == 0),
       mesh(MPI_COMM_WORLD),
-      inlet_velocity(H),
       computing_timer(MPI_COMM_WORLD, pcout,
                       TimerOutput::summary,
                       TimerOutput::wall_times),
-      exact_velocity(nu),
-      exact_pressure(nu),
-      neumann_function(nu)
+      exact_velocity3D(nu),
+      exact_pressure3D(nu),
+      neumann_function3D(nu)
 {
 }

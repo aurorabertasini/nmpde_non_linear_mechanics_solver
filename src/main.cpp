@@ -32,25 +32,21 @@ int main(int argc, char *argv[])
 
     double nu = (uM * cylinder_radius) / Re;
 
-    int choice = 6;
+    int choice = 0;
 
     if (mpi_rank == 0)
-    {                // std::cout << "Div u_star: " << div_u_star[q] << std::endl;
+    { // std::cout << "Div u_star: " << div_u_star[q] << std::endl;
 
         std::cout << "Please choose the problem to solve:" << std::endl;
-        std::cout << "(1) Steady Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(2) Steady Navier-Stokesm Problem 3D" << std::endl;
-        std::cout << "(3) Monolithic Time Dependent Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(4) Monolithic Time Dependent Navier-Stokesm Problem 3D" << std::endl;
-        std::cout << "(5) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(6) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
+        std::cout << "(1) Convergence test 2D" << std::endl;
+        std::cout << "(2) Convergence test 3D" << std::endl;
         std::cout << std::endl;
         std::cout << "Enter your choice: ";
 
-        while (choice < 1 || choice > 6)
+        while (choice < 1 || choice > 2)
         {
             std::cin >> choice;
-            if (choice < 1 || choice > 6)
+            if (choice < 1 || choice > 2)
             {
                 std::cout << "Invalid choice. Please enter a valid choice: ";
             }
@@ -61,71 +57,42 @@ int main(int argc, char *argv[])
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    switch (choice)
+    double deltat_start = 0.1;
+    double deltat = deltat_start;
+    for (double i = 1.0; i <= 3; i += 1.0)
     {
-    case 1:
-    {
-        std::cout << "Solving the Steady Navier-Stokesm Problem 2D" << std::endl;
-        Stokes stokes(mesh2DPath, degreeVelocity, degreePressure, Re);
+        std::cout << deltat << std::endl;
 
-        stokes.setup();
-        stokes.assemble();
-        stokes.solve();
-        stokes.output();
-
-        IncrementalStokes incremental(mesh2DPath, degreeVelocity, degreePressure, Re);
-        incremental.set_initial_conditions(stokes.get_solution());
-        incremental.setup();
-        incremental.solve();
-        incremental.output();
-        incremental.compute_lift_drag();
-        break;
-    }
-    case 2:
-    {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
-    }
-    case 3:
-    {
-        MonolithicNavierStokes monolithicNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, 1, Re);
-        monolithicNavierStokes.setup();
-        monolithicNavierStokes.solve();
-        break;
-    }
-    case 4:
-    {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
-    }
-    case 5:
-    {
-        IncrementalChorinTemam<2> incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        incrementalChorinTemam.run();
-        break;
-    }
-    case 6:
-    {
-        double deltat_start = 0.05;
-        for (double i = 1.0; i <= 4; i += 1.0)
+        switch (choice)
         {
-            double deltat = deltat_start/(2*i);
-
-            std::cout << deltat << std::endl;
+        case 1:
+        {
+            IncrementalChorinTemam<2> incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, deltat, Re);
+            incrementalChorinTemam.run();
+            double error_norm = incrementalChorinTemam.compute_error(VectorTools::L2_norm);
+            // write to file
+            std::ofstream out_file("error_norm_2d.csv", std::ios::app);
+            out_file << deltat << ","
+                     << error_norm << "\n";
+            out_file.close();
+            break;
+        }
+        case 2:
+        {
             IncrementalChorinTemam<3> incrementalChorinTemam(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, deltat, Re);
             incrementalChorinTemam.run();
             double error_norm = incrementalChorinTemam.compute_error(VectorTools::L2_norm);
             // write to file
-            std::ofstream out_file("error_norm.csv", std::ios::app);
+            std::ofstream out_file("error_norm_3d.csv", std::ios::app);
             out_file << deltat << ","
                      << error_norm << "\n";
             out_file.close();
+            break;
+        }
+            return 0;
         }
 
-        break; 
-    }
-
-        return 0;
+        deltat /= 2.0;
     }
 
     auto end = std::chrono::high_resolution_clock::now();

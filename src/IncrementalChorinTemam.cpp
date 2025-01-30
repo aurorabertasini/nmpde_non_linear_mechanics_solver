@@ -31,7 +31,7 @@ void IncrementalChorinTemam<dim>::setup()
     locally_owned_velocity = dof_handler_velocity.locally_owned_dofs();
     locally_relevant_velocity = locally_owned_velocity;
 
-    exact_velocity.set_time(0.0);
+    exact_velocity3D.set_time(0.0);
 
     constraints_velocity.clear();
     DoFTools::make_hanging_node_constraints(dof_handler_velocity, constraints_velocity);
@@ -39,50 +39,39 @@ void IncrementalChorinTemam<dim>::setup()
     // Inlet velocity on boundary ID = 1:
     if constexpr (dim == 2)
     {
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/1,
-                                                 InletVelocity(H),
-                                                 constraints_velocity);
-
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/3,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 constraints_velocity);
-
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/4,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 constraints_velocity);
+        for (int i = 0; i < 4; i++)
+            VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                     /*boundary_id=*/i,
+                                                     Functions::ZeroFunction<dim>(dim),
+                                                     constraints_velocity);
     }
     else if constexpr (dim == 3)
     {
         VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                                  /*boundary_id=*/0,
-                                                 exact_velocity,
+                                                 exact_velocity3D,
                                                  constraints_velocity);
 
         VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                                  /*boundary_id=*/1,
-                                                 exact_velocity,
+                                                 exact_velocity3D,
                                                  constraints_velocity);
 
         // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
         VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                                  /*boundary_id=*/2,
-                                                 exact_velocity,
+                                                 exact_velocity3D,
                                                  constraints_velocity);
 
         // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
         VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                                  /*boundary_id=*/3,
-                                                 exact_velocity,
+                                                 exact_velocity3D,
                                                  constraints_velocity);
 
         VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                                  /*boundary_id=*/5,
-                                                 exact_velocity,
+                                                 exact_velocity3D,
                                                  constraints_velocity);
     }
     constraints_velocity.close();
@@ -98,13 +87,7 @@ void IncrementalChorinTemam<dim>::setup()
     constraints_pressure.clear();
     DoFTools::make_hanging_node_constraints(dof_handler_pressure, constraints_pressure);
     // Fix pressure=0 on boundary to remove nullspace
-    if constexpr (dim == 2)
-        VectorTools::interpolate_boundary_values(
-            dof_handler_pressure,
-            2,
-            Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
-            constraints_pressure);
-    else if constexpr (dim == 3)
+    if constexpr (dim == 3)
         VectorTools::interpolate_boundary_values(
             dof_handler_pressure,
             4,
@@ -218,6 +201,17 @@ void IncrementalChorinTemam<dim>::assemble_system_velocity()
 
         for (unsigned int q = 0; q < n_q; ++q)
         {
+            Tensor<1, dim> forcing_term_new_tensor;
+            if constexpr (dim == 2)
+            {
+                Vector<double> f_new_loc(dim);
+                forcing_term2D.set_time(time);
+                forcing_term2D.vector_value(fe_values.quadrature_point(q),
+                                            f_new_loc);
+                for (unsigned int d = 0; d < dim; ++d)
+                    forcing_term_new_tensor[d] = f_new_loc[d];
+            }
+
             const double JxW = fe_values.JxW(q);
 
             const Tensor<1, dim> &u_star = 2.0 * old_val[q] - old_old_val[q];
@@ -247,50 +241,57 @@ void IncrementalChorinTemam<dim>::assemble_system_velocity()
                 cell_rhs(i) += scalar_product(4.0 * old_val[q], phi_i) * JxW;
                 cell_rhs(i) -= scalar_product(old_old_val[q], phi_i) * JxW;
                 cell_rhs(i) -= 2.0 * deltat * scalar_product(pressure_grad[q], phi_i) * JxW;
+                if constexpr (dim == 2)
+                {
+                    cell_rhs(i) += 2.0 * deltat * scalar_product(forcing_term_new_tensor, phi_i) * JxW;
+                }
             }
         }
 
         // functions.
 
-        if (cell_v->at_boundary())
+        if constexpr (dim == 3) // neumann buondary on velocity for the 3d benchmark
+
         {
-            for (unsigned int face_number = 0; face_number < cell_v->n_faces();
-                 ++face_number)
+            if (cell_v->at_boundary())
             {
-                // If current face lies on the boundary, and its boundary ID (or
-                // tag) is that of one of the Neumann boundaries, we assemble the
-                // boundary integral.
-
-                if (cell_v->face(face_number)->at_boundary() &&
-                    (cell_v->face(face_number)->boundary_id() == 4))
+                for (unsigned int face_number = 0; face_number < cell_v->n_faces();
+                     ++face_number)
                 {
-                    fe_face_values.reinit(cell_v, face_number);
+                    // If current face lies on the boundary, and its boundary ID (or
+                    // tag) is that of one of the Neumann boundaries, we assemble the
+                    // boundary integral.
 
-                    for (unsigned int q = 0; q < quadrature_boundary.size(); ++q)
+                    if (cell_v->face(face_number)->at_boundary() &&
+                        (cell_v->face(face_number)->boundary_id() == 4))
                     {
-                        neumann_function.set_time(time);
-                        neumann_function.vector_value(fe_face_values.quadrature_point(q),
-                                                      neumann_loc);
-                        for (unsigned int d = 0; d < dim; ++d)
-                            neumann_loc_tensor[d] = neumann_loc[d];
+                        fe_face_values.reinit(cell_v, face_number);
 
-                        for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                        for (unsigned int q = 0; q < quadrature_boundary.size(); ++q)
                         {
-                            cell_rhs(i) += 2.0 * deltat * scalar_product(neumann_loc_tensor,
-                                                          fe_face_values[velocity].value(i, q)) *
-                                           fe_face_values.JxW(q);
+                            neumann_function3D.set_time(time);
+                            neumann_function3D.vector_value(fe_face_values.quadrature_point(q),
+                                                            neumann_loc);
+                            for (unsigned int d = 0; d < dim; ++d)
+                                neumann_loc_tensor[d] = neumann_loc[d];
+
+                            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                            {
+                                cell_rhs(i) += 2.0 * deltat * scalar_product(neumann_loc_tensor, fe_face_values[velocity].value(i, q)) *
+                                               fe_face_values.JxW(q);
+                            }
+
+                            // neumann_function3D.set_time(time);
+                            // for (unsigned int dimension = 0; dimension < dim; ++dimension)
+                            // {
+                            //     double n = neumann_function3D.value(fe_face_values.quadrature_point(q), dimension);
+
+                            //     for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                            //     {
+                            //         cell_rhs(i) += n * fe_face_values[velocity].value(i, q)[dimension] * fe_face_values.JxW(q);
+                            //     }
+                            // }
                         }
-
-                        // neumann_function.set_time(time);
-                        // for (unsigned int dimension = 0; dimension < dim; ++dimension)
-                        // {
-                        //     double n = neumann_function.value(fe_face_values.quadrature_point(q), dimension);
-
-                        //     for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                        //     {
-                        //         cell_rhs(i) += n * fe_face_values[velocity].value(i, q)[dimension] * fe_face_values.JxW(q);
-                        //     }
-                        // }
                     }
                 }
             }
@@ -314,7 +315,7 @@ void IncrementalChorinTemam<dim>::solve_velocity_system()
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
 
-    SolverControl solver_control(1000000, 1e-12 * velocity_system_rhs.l2_norm());
+    SolverControl solver_control(1000000, 1e-7 * velocity_system_rhs.l2_norm());
 
     // Create and initialize preconditioner:
     TrilinosWrappers::PreconditionSSOR prec;
@@ -419,7 +420,7 @@ void IncrementalChorinTemam<dim>::solve_pressure_system()
     TimerOutput::Scope t(computing_timer, "solve_pressure");
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
-    SolverControl solver_control(2000000, 1e-12 * pressure_system_rhs.l2_norm());
+    SolverControl solver_control(2000000, 1e-7 * pressure_system_rhs.l2_norm());
 
     TrilinosWrappers::PreconditionIC prec;
     prec.initialize(pressure_matrix);
@@ -516,7 +517,7 @@ void IncrementalChorinTemam<dim>::solve_update_velocity_system()
     TimerOutput::Scope t(computing_timer, "solve_update");
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
-    SolverControl solver_control(2000, 1e-12 * velocity_update_rhs.l2_norm());
+    SolverControl solver_control(2000, 1e-7 * velocity_update_rhs.l2_norm());
 
     // Jacobi or SSOR
     TrilinosWrappers::PreconditionJacobi::AdditionalData data;
@@ -572,28 +573,54 @@ void IncrementalChorinTemam<dim>::run()
 {
     setup();
 
-    exact_velocity.set_time(0.0);
-    exact_pressure.set_time(0.0);
-
+    if constexpr (dim == 3)
     {
+
+        exact_velocity3D.set_time(0.0);
+        exact_pressure3D.set_time(0.0);
+
+        {
+            TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
+            VectorTools::interpolate(dof_handler_velocity,
+                                     exact_velocity3D,
+                                     tmp);
+            constraints_velocity.distribute(tmp);
+            old_velocity = tmp;
+            old_old_velocity = tmp;
+            velocity_solution = tmp;
+        }
+
+        {
+            TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
+            VectorTools::interpolate(dof_handler_pressure,
+                                     exact_pressure3D,
+                                     tmp);
+            constraints_pressure.distribute(tmp);
+            deltap = tmp;
+            pressure_solution = tmp;
+        }
+    }
+    else if constexpr (dim == 3)
+    {
+        exact_velocity2D.set_time(0.0);
+        exact_pressure2D.set_time(0.0);
+        // Apply initial condition
         TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
         VectorTools::interpolate(dof_handler_velocity,
-                                 exact_velocity,
+                                 exact_velocity2D,
                                  tmp);
         constraints_velocity.distribute(tmp);
         old_velocity = tmp;
         old_old_velocity = tmp;
         velocity_solution = tmp;
-    }
 
-    {
-        TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
+        TrilinosWrappers::MPI::Vector tmp_p(locally_owned_pressure, MPI_COMM_WORLD);
         VectorTools::interpolate(dof_handler_pressure,
-                                 exact_pressure,
-                                 tmp);
-        constraints_pressure.distribute(tmp);
-        deltap = tmp;
-        pressure_solution = tmp;
+                                 exact_pressure2D,
+                                 tmp_p);
+        constraints_pressure.distribute(tmp_p);
+        deltap = tmp_p;
+        pressure_solution = tmp_p;
     }
 
     // Possibly output initial
@@ -606,39 +633,6 @@ void IncrementalChorinTemam<dim>::run()
 
         time = deltat * time_step;
         std::cout << "\nTime step " << time_step << " at t=" << time << std::endl;
-
-        exact_velocity.set_time(time);
-
-        constraints_velocity.clear();
-
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/0,
-                                                 exact_velocity,
-                                                 constraints_velocity);
-
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/1,
-                                                 exact_velocity,
-                                                 constraints_velocity);
-
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/2,
-                                                 exact_velocity,
-                                                 constraints_velocity);
-
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/3,
-                                                 exact_velocity,
-                                                 constraints_velocity);
-
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/5,
-                                                 exact_velocity,
-                                                 constraints_velocity);
-
-        constraints_velocity.close();
 
         // 1) Intermediate velocity
         assemble_system_velocity();
@@ -656,25 +650,10 @@ void IncrementalChorinTemam<dim>::run()
         old_old_velocity = old_velocity;
         old_velocity = update_velocity_solution;
 
-        // TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
-        // VectorTools::interpolate(dof_handler_velocity,
-        //                          exact_velocity,
-        //                          tmp);
-        // constraints_velocity.distribute(tmp);
-        
-        // update_velocity_solution = tmp;
-
-        // pressure_solution = old_pressure + deltap;
-
         pressure_solution.add(deltap);
 
         output_results();
-        // compute_lift_drag();
 
-        // // Clear for next iteration
-        // velocity_solution = 0;
-        // pressure_solution = 0;
-        // update_velocity_solution = 0;
         std::cout << compute_error(VectorTools::L2_norm) << std::endl;
         std::cout << compute_error(VectorTools::H1_norm) << std::endl;
     }
@@ -935,10 +914,13 @@ double IncrementalChorinTemam<dim>::compute_error(const VectorTools::NormType &n
                             update_values | update_quadrature_points | update_JxW_values);
 
     // Exact solution setup
-    exact_velocity.set_time(time);
+    if constexpr (dim == 2)
+        exact_velocity2D.set_time(time);
+    else if constexpr (dim == 3)
+        exact_velocity3D.set_time(time);
 
     // Containers to hold exact and computed values
-    std::vector<Vector<double>> exact_velocity_values(quadrature_formula.size(), Vector<double>(dim));
+    std::vector<Vector<double>> exact_velocity3D_values(quadrature_formula.size(), Vector<double>(dim));
     std::vector<Tensor<1, dim>> computed_velocity_values(quadrature_formula.size());
 
     double local_error = 0.0;
@@ -954,15 +936,18 @@ double IncrementalChorinTemam<dim>::compute_error(const VectorTools::NormType &n
         fe_values[FEValuesExtractors::Vector(0)].get_function_values(update_velocity_solution, computed_velocity_values);
 
         // Compute the exact velocity at quadrature points
-        exact_velocity.vector_value_list(fe_values.get_quadrature_points(), exact_velocity_values);
+        if constexpr (dim == 2)
+            exact_velocity2D.vector_value_list(fe_values.get_quadrature_points(), exact_velocity3D_values);
+        else if constexpr (dim == 3)
+            exact_velocity3D.vector_value_list(fe_values.get_quadrature_points(), exact_velocity3D_values);
 
-        // Convert exact_velocity_values to Tensor<1, dim>
-        std::vector<Tensor<1, dim>> exact_velocity_tensors(quadrature_formula.size());
+        // Convert exact_velocity3D_values to Tensor<1, dim>
+        std::vector<Tensor<1, dim>> exact_velocity3D_tensors(quadrature_formula.size());
         for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
         {
             for (unsigned int i = 0; i < dim; ++i)
             {
-                exact_velocity_tensors[q][i] = exact_velocity_values[q][i];
+                exact_velocity3D_tensors[q][i] = exact_velocity3D_values[q][i];
             }
         }
 
@@ -972,7 +957,7 @@ double IncrementalChorinTemam<dim>::compute_error(const VectorTools::NormType &n
             const double JxW = fe_values.JxW(q);
 
             // Compute the L2-norm of the error at this quadrature point
-            Tensor<1, dim> error = computed_velocity_values[q] - exact_velocity_tensors[q];
+            Tensor<1, dim> error = computed_velocity_values[q] - exact_velocity3D_tensors[q];
             local_error += error.norm_square() * JxW;
         }
     }
@@ -983,6 +968,76 @@ double IncrementalChorinTemam<dim>::compute_error(const VectorTools::NormType &n
 
     // Return the square root of the global error for the L2 norm
     return std::sqrt(global_error);
+}
+
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::update_buondary_conditions()
+{
+    if constexpr (dim == 2)
+    {
+        exact_velocity2D.set_time(time);
+
+        constraints_velocity.clear();
+
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/0,
+                                                 exact_velocity2D,
+                                                 constraints_velocity);
+
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/1,
+                                                 exact_velocity2D,
+                                                 constraints_velocity);
+
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 2:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/2,
+                                                 exact_velocity2D,
+                                                 constraints_velocity);
+
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/3,
+                                                 exact_velocity2D,
+                                                 constraints_velocity);
+
+        constraints_velocity.close();
+    }
+    else if constexpr (dim == 3)
+    {
+        exact_velocity3D.set_time(time);
+
+        constraints_velocity.clear();
+
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/0,
+                                                 exact_velocity3D,
+                                                 constraints_velocity);
+
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/1,
+                                                 exact_velocity3D,
+                                                 constraints_velocity);
+
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/2,
+                                                 exact_velocity3D,
+                                                 constraints_velocity);
+
+        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/3,
+                                                 exact_velocity3D,
+                                                 constraints_velocity);
+
+        VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                                 /*boundary_id=*/5,
+                                                 exact_velocity3D,
+                                                 constraints_velocity);
+
+        constraints_velocity.close();
+    }
 }
 
 template class IncrementalChorinTemam<2>;
