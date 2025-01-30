@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 
     double nu = (uM * cylinder_radius) / Re;
 
-    int choice = 0;
+    int choice = 6;
 
     if (mpi_rank == 0)
     {                // std::cout << "Div u_star: " << div_u_star[q] << std::endl;
@@ -106,9 +106,22 @@ int main(int argc, char *argv[])
     }
     case 6:
     {
-        IncrementalChorinTemam<3> incrementalChorinTemam(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        std::cout << "Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
-        incrementalChorinTemam.run();
+        double deltat_start = 0.05;
+        for (double i = 1.0; i <= 4; i += 1.0)
+        {
+            double deltat = deltat_start/(2*i);
+
+            std::cout << deltat << std::endl;
+            IncrementalChorinTemam<3> incrementalChorinTemam(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, deltat, Re);
+            incrementalChorinTemam.run();
+            double error_norm = incrementalChorinTemam.compute_error(VectorTools::L2_norm);
+            // write to file
+            std::ofstream out_file("error_norm.csv", std::ios::app);
+            out_file << deltat << ","
+                     << error_norm << "\n";
+            out_file.close();
+        }
+
         break; 
     }
 

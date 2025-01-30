@@ -181,7 +181,7 @@ public:
 
     protected:
     };
-    
+
     class InletVelocity : public Function<dim>
     {
     public:
@@ -276,6 +276,202 @@ public:
                 return 0.0;
         }
     };
+    class EthierSteinmanVelocity : public Function<dim>
+    {
+    public:
+        EthierSteinmanVelocity(double nu_)
+            : Function<dim>(dim), nu(nu_)
+        {
+        }
+
+        virtual void
+        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        {
+            double t = this->get_time();
+            double x1 = p[0];
+            double x2 = p[1];
+            double x3 = p[2];
+
+            double factor = -a * std::exp(-nu * b * b * t);
+
+            values[0] = factor * (std::exp(a * x1) * std::sin(a * x2 + b * x3) + std::exp(a * x3) * std::cos(a * x1 + b * x2));
+            values[1] = factor * (std::exp(a * x2) * std::sin(a * x3 + b * x1) + std::exp(a * x1) * std::cos(a * x2 + b * x3));
+            values[2] = factor * (std::exp(a * x3) * std::sin(a * x1 + b * x2) + std::exp(a * x2) * std::cos(a * x3 + b * x1));
+        }
+
+        virtual double
+        value(const Point<dim> &p, const unsigned int component = 0) const override
+        {
+            double t = this->get_time();
+            double x1 = p[0];
+            double x2 = p[1];
+            double x3 = p[2];
+
+            double factor = -a * std::exp(-nu * b * b * t);
+
+            if (component == 0)
+                return factor * (std::exp(a * x1) * std::sin(a * x2 + b * x3) + std::exp(a * x3) * std::cos(a * x1 + b * x2));
+            else if (component == 1)
+                return factor * (std::exp(a * x2) * std::sin(a * x3 + b * x1) + std::exp(a * x1) * std::cos(a * x2 + b * x3));
+            else
+                return factor * (std::exp(a * x3) * std::sin(a * x1 + b * x2) + std::exp(a * x2) * std::cos(a * x3 + b * x1));
+        }
+
+        virtual Tensor<1, dim>
+        gradient(
+            const Point<dim> &p, const unsigned int component) const
+        {
+            Tensor<1, dim> result;
+
+            for (unsigned int i = 0; i < dim; i++)
+            {
+                result[i] = -a * std::exp(-nu * b * b * this->get_time());
+            }
+
+            if (component == 0)
+            {
+                result[0] *= (a * std::exp(a * p[0]) * std::sin(a * p[1] + b * p[2]) -
+                              a * std::exp(a * p[2]) * std::sin(a * p[0] + b * p[1]));
+                result[1] *= (a * std::exp(a * p[0]) * std::cos(a * p[1] + b * p[2]) -
+                              b * std::exp(a * p[2]) * std::sin(a * p[0] + b * p[1]));
+                result[2] *= (b * std::exp(a * p[0]) * std::cos(a * p[1] + b * p[2]) +
+                              a * std::exp(a * p[2]) * std::cos(a * p[0] + b * p[1]));
+            }
+            else if (component == 1)
+            {
+                result[0] *= (b * std::exp(a * p[1]) * std::cos(a * p[2] + b * p[0]) +
+                              a * std::exp(a * p[0]) * std::cos(a * p[1] + b * p[2]));
+                result[1] *= (a * std::exp(a * p[1]) * std::sin(a * p[2] + b * p[0]) -
+                              a * std::exp(a * p[0]) * std::sin(a * p[1] + b * p[2]));
+                result[2] *= (a * std::exp(a * p[1]) * std::cos(a * p[2] + b * p[0]) -
+                              b * std::exp(a * p[0]) * std::sin(a * p[1] + b * p[2]));
+            }
+            else if (component == 2)
+            {
+                result[0] *= (a * std::exp(a * p[2]) * std::cos(a * p[0] + b * p[1]) -
+                              b * std::exp(a * p[1]) * std::sin(a * p[2] + b * p[0]));
+                result[1] *= (b * std::exp(a * p[2]) * std::cos(a * p[0] + b * p[1]) +
+                              a * std::exp(a * p[1]) * std::cos(a * p[2] + b * p[0]));
+                result[2] *= (a * std::exp(a * p[2]) * std::sin(a * p[0] + b * p[1]) -
+                              a * std::exp(a * p[1]) * std::sin(a * p[2] + b * p[0]));
+            }
+            else
+            {
+                for (unsigned int i = 0; i < dim; i++)
+                {
+                    result[i] = 0.0;
+                }
+            }
+
+            return result;
+        }
+
+        virtual void vector_gradient(
+            const Point<dim> &p, std::vector<Tensor<1, dim>> &values) const
+        {
+            for (unsigned int i = 0; i < dim + 1; i++)
+            {
+                values[i] = gradient(p, i);
+            }
+        }
+
+    private:
+        const double a = M_PI / 4.;
+        const double b = M_PI / 2.;
+        const double nu;
+    };
+
+    class EthierSteinmanPressure : public Function<dim>
+    {
+    public:
+        EthierSteinmanPressure(double nu_)
+            : Function<dim>(1), nu(nu_)
+        {
+        }
+
+        virtual double
+        value(const Point<dim> &p, const unsigned int /*component*/ = 0) const override
+        {
+            double t = this->get_time();
+            return -a * a / 2.0 * std::exp(-2 * nu * b * b * t) *
+                   (2.0 * std::sin(a * p[0] + b * p[1]) * std::cos(a * p[2] + b * p[0]) *
+                        std::exp(a * (p[1] + p[2])) +
+                    2.0 * std::sin(a * p[1] + b * p[2]) * std::cos(a * p[0] + b * p[1]) *
+                        std::exp(a * (p[0] + p[2])) +
+                    2.0 * std::sin(a * p[2] + b * p[0]) * std::cos(a * p[1] + b * p[2]) *
+                        std::exp(a * (p[0] + p[1])) +
+                    std::exp(2.0 * a * p[0]) + std::exp(2.0 * a * p[1]) +
+                    std::exp(2.0 * a * p[2]));
+        }
+
+        virtual void
+        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        {
+            double t = this->get_time();
+            values[0] = -a * a / 2.0 * std::exp(-2 * nu * b * b * t) *
+                        (2.0 * std::sin(a * p[0] + b * p[1]) * std::cos(a * p[2] + b * p[0]) *
+                             std::exp(a * (p[1] + p[2])) +
+                         2.0 * std::sin(a * p[1] + b * p[2]) * std::cos(a * p[0] + b * p[1]) *
+                             std::exp(a * (p[0] + p[2])) +
+                         2.0 * std::sin(a * p[2] + b * p[0]) * std::cos(a * p[1] + b * p[2]) *
+                             std::exp(a * (p[0] + p[1])) +
+                         std::exp(2.0 * a * p[0]) + std::exp(2.0 * a * p[1]) +
+                         std::exp(2.0 * a * p[2]));
+        }
+
+    private:
+        const double a = M_PI / 4.;
+        const double b = M_PI / 2.;
+        const double nu;
+    };
+
+    class EthierSteinmanNeumann : public Function<dim>
+    {
+    public:
+        EthierSteinmanNeumann(double nu_)
+            : Function<dim>(dim + 1), nu(nu_), exact_velocity(nu_), exact_pressure(nu_)
+        {
+        }
+
+        virtual double
+        value(const Point<dim> &p, const unsigned int component) const
+        {
+            exact_pressure.set_time(this->get_time());
+            exact_velocity.set_time(this->get_time());
+
+            if (component == 0 || component == 2)
+            {
+                Tensor<1, dim> velocity_gradient =
+                    exact_velocity.gradient(p, component);
+                return -nu * velocity_gradient[1];
+            }
+            else if (component == 1)
+            {
+                Tensor<1, dim> velocity_gradient =
+                    exact_velocity.gradient(p, component);
+                return -nu * velocity_gradient[1] + exact_pressure.value(p);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+
+        virtual void
+        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        {
+            for (unsigned int i = 0; i < dim + 1; i++)
+            {
+                values[i] = value(p, i);
+            }
+        }
+
+    private:
+        mutable EthierSteinmanVelocity exact_velocity;
+        mutable EthierSteinmanPressure exact_pressure;
+
+        const double nu;
+    };
 
     IncrementalChorinTemam(const std::string &mesh_file_name_,
                            const unsigned int &degree_velocity_,
@@ -305,6 +501,8 @@ public:
     void compute_lift_drag();
 
     std::string get_output_directory();
+
+    double compute_error(const VectorTools::NormType &norm_type);
 
 private:
     Triangulation<dim> triangulation;
@@ -348,10 +546,10 @@ private:
     const double T;
     unsigned int timestep_number;
     double deltat;
-    double time;
+    double time = 0;
 
     // Viscosity
-    double nu;
+    const double nu = 1. / 100.;
 
     unsigned int time_step = 0;
 
@@ -381,6 +579,12 @@ private:
     parallel::fullydistributed::Triangulation<dim> mesh;
 
     InletVelocity inlet_velocity;
+
+    EthierSteinmanVelocity exact_velocity;
+
+    EthierSteinmanPressure exact_pressure;
+
+    EthierSteinmanNeumann neumann_function;
 
     // Height of the channel.
     const double H = 0.41;
@@ -425,8 +629,9 @@ IncrementalChorinTemam<dim>::IncrementalChorinTemam(
       inlet_velocity(H),
       computing_timer(MPI_COMM_WORLD, pcout,
                       TimerOutput::summary,
-                      TimerOutput::wall_times)
+                      TimerOutput::wall_times),
+      exact_velocity(nu),
+      exact_pressure(nu),
+      neumann_function(nu)
 {
-    std::cout << "Initializing the mesh" << std::endl;
-    this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
 }
