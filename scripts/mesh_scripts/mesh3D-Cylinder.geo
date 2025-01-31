@@ -2,7 +2,8 @@
 // without using the OpenCASCADE kernel
 
 // Mesh size parameter
-lc = 0.05; // Adjust this value to refine or coarsen the mesh
+lc = 0.07; // Adjust this value to refine or coarsen the mesh
+Printf("mesh3D-Cylinder: lc = %g", lc);
 
 // Domain dimensions
 H = 0.41;
@@ -14,30 +15,30 @@ y_c = 0.2;    // Cylinder center y-coordinate
 R   = 0.05;    // Cylinder radius
 
 // Define corner points of the outer domain
-Point(1) = {0, 0, 0, lc};
-Point(2) = {0, 0, H, lc};
-Point(3) = {0, H, H, lc};
-Point(4) = {0, H, 0, lc};
-Point(5) = {L, 0, 0, lc};
-Point(6) = {L, 0, H, lc};
-Point(7) = {L, H, H, lc};
-Point(8) = {L, H, 0, lc};
+Point(1) = {0, 0, 0, 1.75*lc};
+Point(2) = {0, 0, H, 1.75*lc};
+Point(3) = {0, H, H, 1.75*lc};
+Point(4) = {0, H, 0, 1.75*lc};
+Point(5) = {L, 0, 0, 1.75*lc};
+Point(6) = {L, 0, H, 1.75*lc};
+Point(7) = {L, H, H, 1.75*lc};
+Point(8) = {L, H, 0, 1.75*lc};
 
 // Define points around the cylinder at z=0 (base)
-Point(9)  = {x_c + R, y_c,      0, lc}; // Right point
-Point(10) = {x_c,      y_c + R, 0, lc}; // Top point
-Point(11) = {x_c - R, y_c,      0, lc}; // Left point
-Point(12) = {x_c,      y_c - R, 0, lc}; // Bottom point
+Point(9)  = {x_c + R, y_c,      0, 0.5*lc}; // Right point
+Point(10) = {x_c,      y_c + R, 0, 0.5*lc}; // Top point
+Point(11) = {x_c - R, y_c,      0, 0.5*lc}; // Left point
+Point(12) = {x_c,      y_c - R, 0, 0.5*lc}; // Bottom point
 
 // Define points around the cylinder at z=H (top)
-Point(13) = {x_c + R, y_c,      H, lc};
-Point(14) = {x_c,      y_c + R, H, lc};
-Point(15) = {x_c - R, y_c,      H, lc};
-Point(16) = {x_c,      y_c - R, H, lc};
+Point(13) = {x_c + R, y_c,      H, 0.5*lc};
+Point(14) = {x_c,      y_c + R, H, 0.5*lc};
+Point(15) = {x_c - R, y_c,      H, 0.5*lc};
+Point(16) = {x_c,      y_c - R, H, 0.5*lc};
 
 // Center points for circle arcs
-Point(17) = {x_c, y_c, 0, lc}; // Center at z=0
-Point(18) = {x_c, y_c, H, lc}; // Center at z=H
+Point(17) = {x_c, y_c, 0, 0.5*lc}; // Center at z=0
+Point(18) = {x_c, y_c, H, 0.5*lc}; // Center at z=H
 
 // Define circle arcs at z=0 (base of cylinder)
 Circle(101) = {9, 17, 10};
@@ -121,20 +122,12 @@ Surface Loop(1) = {1, 2, 3, 4, 5, 6, -7, -8, -9, -10};
 Volume(1) = {1};
 
 // Define Physical Groups for boundary conditions
+// Surfaces:
+Physical Surface(0) = {1};          // Inlet
+Physical Surface(1) = {2};          // Outlet
+Physical Surface(2) = {3, 4, 5, 6}; // Walls
+Physical Surface(3) = {7, 8, 9, 10}; // Obstacle
+// Volume:
+Physical Volume(4) = {1};            // Fluid domain
 
-// Physical Volume for the fluid domain
-Physical Volume("Fluid") = {1};
 
-// Physical Surfaces for boundary conditions
-
-// Inlet surface at x=0
-Physical Surface("Inlet") = {1};
-
-// Outlet surface at x=L
-Physical Surface("Outlet") = {2};
-
-// Walls (remaining outer surfaces)
-Physical Surface("Walls") = {3, 4, 5, 6};
-
-// Obstacle surfaces (cylinder)
-Physical Surface("Obstacle") = {7, 8, 9, 10};

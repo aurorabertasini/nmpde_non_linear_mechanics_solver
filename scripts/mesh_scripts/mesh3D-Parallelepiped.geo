@@ -5,6 +5,7 @@
 
 // Mesh size parameter
 lc = 0.05; // Adjust this value to refine or coarsen the mesh
+Printf("mesh3D-Paralleliped: lc = %g", lc);
 
 // Domain dimensions
 H = 0.41;
@@ -121,20 +122,11 @@ Surface Loop(1) = {1,2,3,4,5,6,-7,-8,-9,-10};
 Volume(1) = {1};
 
 // Define Physical Groups for boundary conditions
-
-// Physical Volume for the fluid domain
-Physical Volume("Fluid") = {1};
-
-// Physical Surfaces for boundary conditions
-
-// Inlet surface (face at x=0)
-Physical Surface("Inlet") = {1};
-
-// Outlet surface (face at x=L)
-Physical Surface("Outlet") = {2};
-
-// Walls (remaining outer surfaces)
-Physical Surface("Walls") = {3,4,5,6};
-
-// Obstacle surfaces
-Physical Surface("Obstacle") = {7,8,9,10};
+// Define Physical Groups for boundary conditions
+// Surfaces:
+Physical Surface(0) = {1};          // Inlet
+Physical Surface(1) = {2};          // Outlet
+Physical Surface(2) = {3, 4, 5, 6}; // Walls
+Physical Surface(3) = {7, 8, 9, 10}; // Obstacle
+// Volume:
+Physical Volume(4) = {1};            // Fluid domain

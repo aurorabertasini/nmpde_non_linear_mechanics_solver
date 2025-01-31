@@ -1,5 +1,6 @@
 // Mesh size parameter
-lc = 0.009; // Adjust this value to refine or coarsen the mesh
+lc = 0.05; // Adjust this value to refine or coarsen the mesh
+Printf("mesh2D: lc = %g", lc);
 
 // Define the outer rectangle points
 Point(1) = {0, 0, 0, 1.5 * lc};
@@ -36,11 +37,11 @@ Line Loop(2) = {5,6,7,8};       // Circle (cylinder)
 Plane Surface(1) = {1,2};
 
 // Define physical groups for boundary conditions
-Physical Line("Inlet") = {4};             // Left edge
-Physical Line("Outlet") = {2};            // Right edge
-Physical Line("Walls") = {1,3};           // Top and bottom edges
-Physical Line("Cylinder") = {5,6,7,8};    // Cylinder boundary
-Physical Surface("Fluid") = {1};          // Fluid domain
+Physical Line(0) = {4};         // Inlet
+Physical Line(1) = {2};         // Outlet
+Physical Line(2) = {1,3};       // Walls
+Physical Line(3) = {5,6,7,8};   // Cylinder
+Physical Surface(4) = {1};      // Fluid domain
 
 
 // You can refine the mesh near the cylinder if needed
