@@ -1,6 +1,5 @@
 #include "../include/SteadyNavierStokes.hpp"
 #include "../include/MonolithicNavierStokes.hpp"
-#include "../include/ChorinTemam.hpp"
 #include "../include/IncrementalChorinTemam.hpp"
 #include "../include/ConfigReader.hpp"
 

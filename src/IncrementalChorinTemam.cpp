@@ -19,8 +19,8 @@ void IncrementalChorinTemam<dim>::setup()
         create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
     mesh.create_triangulation(construction_data);
 
-    std::cout << "  Number of elements = " << mesh.n_global_active_cells()
-              << std::endl;
+    if (mpi_rank == 0)
+        std::cout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
 
     //-----------------------------
     // Velocity dofs
@@ -29,9 +29,10 @@ void IncrementalChorinTemam<dim>::setup()
     dof_handler_velocity.reinit(mesh);
     dof_handler_velocity.distribute_dofs(fe_velocity);
     locally_owned_velocity = dof_handler_velocity.locally_owned_dofs();
-    locally_relevant_velocity = locally_owned_velocity;
+    DoFTools::extract_locally_relevant_dofs(dof_handler_velocity, locally_relevant_velocity);
 
     constraints_velocity.clear();
+    constraints_velocity.reinit(locally_relevant_velocity);
     DoFTools::make_hanging_node_constraints(dof_handler_velocity, constraints_velocity);
 
     // Inlet velocity on boundary ID = 1:
@@ -81,9 +82,10 @@ void IncrementalChorinTemam<dim>::setup()
     dof_handler_pressure.reinit(mesh);
     dof_handler_pressure.distribute_dofs(fe_pressure);
     locally_owned_pressure = dof_handler_pressure.locally_owned_dofs();
-    locally_relevant_pressure = locally_owned_pressure;
+    DoFTools::extract_locally_relevant_dofs(dof_handler_pressure, locally_relevant_pressure);
 
     constraints_pressure.clear();
+    constraints_pressure.reinit(locally_relevant_pressure);
     DoFTools::make_hanging_node_constraints(dof_handler_pressure, constraints_pressure);
     // Fix pressure=0 on boundary to remove nullspace
     if constexpr (dim == 2)
@@ -125,6 +127,7 @@ void IncrementalChorinTemam<dim>::setup()
     //-----------------------------
     // Reinit all vectors
     //-----------------------------
+
     old_velocity.reinit(locally_owned_velocity, locally_relevant_velocity, MPI_COMM_WORLD);
     old_old_velocity.reinit(locally_owned_velocity, locally_relevant_velocity, MPI_COMM_WORLD);
     velocity_solution.reinit(locally_owned_velocity, locally_relevant_velocity, MPI_COMM_WORLD);
@@ -137,8 +140,9 @@ void IncrementalChorinTemam<dim>::setup()
     pressure_solution.reinit(locally_owned_pressure, locally_relevant_pressure, MPI_COMM_WORLD);
     pressure_system_rhs.reinit(locally_owned_pressure, MPI_COMM_WORLD);
 
-    std::cout << "DoFs: velocity=" << dof_handler_velocity.n_dofs()
-              << ", pressure=" << dof_handler_pressure.n_dofs() << std::endl;
+    if (mpi_rank == 0)
+        std::cout << "DoFs: velocity=" << dof_handler_velocity.n_dofs()
+                  << ", pressure=" << dof_handler_pressure.n_dofs() << std::endl;
 }
 
 template <unsigned int dim>
@@ -218,7 +222,7 @@ void IncrementalChorinTemam<dim>::assemble_system_velocity()
                     // Viscous
                     lhs += 2.0 * deltat * nu * scalar_product(grad_phi_j, grad_phi_i);
                     // Convection
-                    lhs += 2.0 * deltat * (scalar_product(grad_phi_j * u_star, phi_i) + 0.5 * scalar_product(phi_j * u_star_div, phi_i)); // dealii non condivide (o quasi)
+                    lhs += 2.0 * deltat * (scalar_product(grad_phi_j * u_star, phi_i)); // dealii non condivide (o quasi)
 
                     cell_matrix(i, j) += lhs * JxW;
                 }
@@ -246,7 +250,7 @@ void IncrementalChorinTemam<dim>::solve_velocity_system()
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
 
-    SolverControl solver_control(1000000, 1e-12 * velocity_system_rhs.l2_norm());
+    SolverControl solver_control(1000000, 1e-7 * velocity_system_rhs.l2_norm());
 
     // Create and initialize preconditioner:
     TrilinosWrappers::PreconditionSSOR prec;
@@ -258,13 +262,18 @@ void IncrementalChorinTemam<dim>::solve_velocity_system()
     // Solve the linear system:
     solver_gmres.solve(velocity_matrix, tmp, velocity_system_rhs, prec);
 
-    std::cout << "Velocity GMRES iterations: " << solver_control.last_step() << std::endl;
+    if (mpi_rank == 0)
+        std::cout << "Velocity GMRES iterations: " << solver_control.last_step() << std::endl;
 
     // Distribute constraints (apply hanging-node constraints, Dirichlet BC, etc.):
     constraints_velocity.distribute(tmp);
 
     // Update the global velocity solution:
     velocity_solution = tmp;
+
+    constraints_velocity.distribute(velocity_solution);
+
+    velocity_solution.update_ghost_values();
 }
 template <unsigned int dim>
 void IncrementalChorinTemam<dim>::assemble_system_pressure()
@@ -351,7 +360,7 @@ void IncrementalChorinTemam<dim>::solve_pressure_system()
     TimerOutput::Scope t(computing_timer, "solve_pressure");
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
-    SolverControl solver_control(2000000, 1e-12 * pressure_system_rhs.l2_norm());
+    SolverControl solver_control(2000000, 1e-7 * pressure_system_rhs.l2_norm());
 
     TrilinosWrappers::PreconditionIC prec;
     prec.initialize(pressure_matrix);
@@ -359,10 +368,14 @@ void IncrementalChorinTemam<dim>::solve_pressure_system()
     SolverCG<TrilinosWrappers::MPI::Vector> solver_cg(solver_control);
     solver_cg.solve(pressure_matrix, tmp, pressure_system_rhs, prec);
 
-    std::cout << "Pressure CG iterations: " << solver_control.last_step() << std::endl;
+    if (mpi_rank == 0)
+        std::cout << "Pressure CG iterations: " << solver_control.last_step() << std::endl;
 
     constraints_pressure.distribute(tmp);
     deltap = tmp;
+    constraints_pressure.distribute(deltap);
+
+    deltap.update_ghost_values();
 }
 
 template <unsigned int dim>
@@ -448,7 +461,7 @@ void IncrementalChorinTemam<dim>::solve_update_velocity_system()
     TimerOutput::Scope t(computing_timer, "solve_update");
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
-    SolverControl solver_control(2000, 1e-12 * velocity_update_rhs.l2_norm());
+    SolverControl solver_control(2000, 1e-7 * velocity_update_rhs.l2_norm());
 
     // Jacobi or SSOR
     TrilinosWrappers::PreconditionJacobi::AdditionalData data;
@@ -462,10 +475,15 @@ void IncrementalChorinTemam<dim>::solve_update_velocity_system()
 
     solver_cg.solve(velocity_update_matrix, tmp, velocity_update_rhs, prec);
 
-    std::cout << "Velocity update CG iters: " << solver_control.last_step() << std::endl;
+    if (mpi_rank == 0)
+        std::cout << "Velocity update CG iters: " << solver_control.last_step() << std::endl;
 
     constraints_velocity.distribute(tmp);
     update_velocity_solution = tmp;
+
+    constraints_velocity.distribute(update_velocity_solution);
+
+    update_velocity_solution.update_ghost_values();
 }
 
 template <unsigned int dim>
@@ -485,18 +503,28 @@ void IncrementalChorinTemam<dim>::output_results()
                              velocity_interpretation);
 
     data_out.add_data_vector(dof_handler_pressure, pressure_solution, "pressure");
-    data_out.add_data_vector(dof_handler_pressure, deltap, "deltap");
+    std::vector<unsigned int> partition_int(this->mesh.n_active_cells());
+    GridTools::get_subdomain_association(this->mesh, partition_int);
+    const Vector<double> partitioning(partition_int.begin(), partition_int.end());
+    data_out.add_data_vector(partitioning, "partitioning");
+
     data_out.build_patches();
 
+    std::string numProcessors = std::to_string(this->mpi_size);
+    numProcessors += (this->mpi_size == 1) ? "_processor" : "_processors";
     std::string output_dir = get_output_directory();
 
     // Usa un tempo formattato con padding (es. 000, 001, ..., 010)
     std::ostringstream fname;
-    fname << output_dir.c_str();
-    fname << "solution-0_" << std::setw(5) << std::setfill('0') << static_cast<int>(time * 1000) << ".vtk";
+    // fname << output_dir.c_str();
+    fname << "solution-0_" ;
 
     std::ofstream out(fname.str());
-    data_out.write_vtk(out);
+    data_out.write_vtu_with_pvtu_record(output_dir,
+                                        fname.str(),
+                                        time_step,
+                                        MPI_COMM_WORLD,
+                                        3);
 }
 
 template <unsigned int dim>
@@ -534,7 +562,8 @@ void IncrementalChorinTemam<dim>::run()
         ++time_step;
 
         time = deltat * time_step;
-        std::cout << "\nTime step " << time_step << " at t=" << time << std::endl;
+        if (mpi_rank == 0)
+            std::cout << "\nTime step " << time_step << " at t=" << time << std::endl;
 
         // 1) Intermediate velocity
         assemble_system_velocity();
