@@ -3,9 +3,6 @@
 template <unsigned int dim>
 void IncrementalChorinTemam<dim>::setup()
 {
-
-    std::cout << "Initializing the mesh" << std::endl;
-
     Triangulation<dim> mesh_serial;
 
     GridIn<dim> grid_in;
@@ -19,8 +16,9 @@ void IncrementalChorinTemam<dim>::setup()
         create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
     mesh.create_triangulation(construction_data);
 
-    std::cout << "  Number of elements = " << mesh.n_global_active_cells()
+     std::cout << "  Number of elements = " << mesh.n_global_active_cells()
               << std::endl;
+
 
     //-----------------------------
     // Velocity dofs
@@ -126,13 +124,12 @@ void IncrementalChorinTemam<dim>::setup()
     update_velocity_solution.reinit(locally_owned_velocity, locally_relevant_velocity, MPI_COMM_WORLD);
     velocity_system_rhs.reinit(locally_owned_velocity, MPI_COMM_WORLD);
     velocity_update_rhs.reinit(locally_owned_velocity, MPI_COMM_WORLD);
-
     // old_pressure.reinit(locally_owned_pressure, locally_relevant_pressure, MPI_COMM_WORLD);
     deltap.reinit(locally_owned_pressure, locally_relevant_pressure, MPI_COMM_WORLD);
     pressure_solution.reinit(locally_owned_pressure, locally_relevant_pressure, MPI_COMM_WORLD);
     pressure_system_rhs.reinit(locally_owned_pressure, MPI_COMM_WORLD);
 
-    std::cout << "DoFs: velocity=" << dof_handler_velocity.n_dofs()
+     std::cout << "DoFs: velocity=" << dof_handler_velocity.n_dofs()
               << ", pressure=" << dof_handler_pressure.n_dofs() << std::endl;
 }
 
@@ -233,7 +230,7 @@ void IncrementalChorinTemam<dim>::assemble_system_velocity()
                     // Viscous
                     lhs += 2.0 * deltat * nu * scalar_product(grad_phi_j, grad_phi_i);
                     // Convection
-                    lhs += 2.0 * deltat * (scalar_product(grad_phi_j * u_star, phi_i) + 0.5 * scalar_product(phi_j * u_star_div, phi_i)); // dealii non condivide (o quasi)
+                    lhs += 2.0 * deltat * (scalar_product(grad_phi_j * u_star, phi_i) ); // dealii non condivide (o quasi)
 
                     cell_matrix(i, j) += lhs * JxW;
                 }
@@ -280,17 +277,6 @@ void IncrementalChorinTemam<dim>::assemble_system_velocity()
                                 cell_rhs(i) += 2.0 * deltat * scalar_product(neumann_loc_tensor, fe_face_values[velocity].value(i, q)) *
                                                fe_face_values.JxW(q);
                             }
-
-                            // neumann_function3D.set_time(time);
-                            // for (unsigned int dimension = 0; dimension < dim; ++dimension)
-                            // {
-                            //     double n = neumann_function3D.value(fe_face_values.quadrature_point(q), dimension);
-
-                            //     for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                            //     {
-                            //         cell_rhs(i) += n * fe_face_values[velocity].value(i, q)[dimension] * fe_face_values.JxW(q);
-                            //     }
-                            // }
                         }
                     }
                 }
@@ -315,7 +301,7 @@ void IncrementalChorinTemam<dim>::solve_velocity_system()
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_velocity, MPI_COMM_WORLD);
 
-    SolverControl solver_control(1000000, 1e-7 * velocity_system_rhs.l2_norm());
+    SolverControl solver_control(20000, 1e-7 * velocity_system_rhs.l2_norm());
 
     // Create and initialize preconditioner:
     TrilinosWrappers::PreconditionSSOR prec;
@@ -420,7 +406,7 @@ void IncrementalChorinTemam<dim>::solve_pressure_system()
     TimerOutput::Scope t(computing_timer, "solve_pressure");
 
     TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
-    SolverControl solver_control(2000000, 1e-7 * pressure_system_rhs.l2_norm());
+    SolverControl solver_control(20000, 1e-7 * pressure_system_rhs.l2_norm());
 
     TrilinosWrappers::PreconditionIC prec;
     prec.initialize(pressure_matrix);
@@ -531,7 +517,7 @@ void IncrementalChorinTemam<dim>::solve_update_velocity_system()
 
     solver_cg.solve(velocity_update_matrix, tmp, velocity_update_rhs, prec);
 
-    std::cout << "Velocity update CG iters: " << solver_control.last_step() << std::endl;
+    std::cout << "Update CG iterations: " << solver_control.last_step() << std::endl;
 
     constraints_velocity.distribute(tmp);
     update_velocity_solution = tmp;
@@ -596,11 +582,20 @@ void IncrementalChorinTemam<dim>::run()
                                      exact_pressure3D,
                                      tmp);
             constraints_pressure.distribute(tmp);
-            deltap = tmp;
             pressure_solution = tmp;
+            old_pressure = tmp;
+        }
+
+        {
+            TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
+            VectorTools::interpolate(dof_handler_pressure,
+                                     Functions::ZeroFunction<dim>(),
+                                        tmp);
+            constraints_pressure.distribute(tmp);
+            deltap = tmp;
         }
     }
-    else if constexpr (dim == 3)
+    else if constexpr (dim == 2)
     {
         exact_velocity2D.set_time(0.0);
         exact_pressure2D.set_time(0.0);
@@ -632,7 +627,7 @@ void IncrementalChorinTemam<dim>::run()
         ++time_step;
 
         time = deltat * time_step;
-        std::cout << "\nTime step " << time_step << " at t=" << time << std::endl;
+        std::cout << "Time step " << time_step << " at t=" << time << std::endl;
 
         // 1) Intermediate velocity
         assemble_system_velocity();
@@ -652,216 +647,18 @@ void IncrementalChorinTemam<dim>::run()
 
         pressure_solution.add(deltap);
 
+        // if constexpr(dim == 3)
+        // {
+        //     exact_pressure3D.set_time(time);
+        //      TrilinosWrappers::MPI::Vector tmp(locally_owned_pressure, MPI_COMM_WORLD);
+        //     VectorTools::interpolate(dof_handler_pressure,
+        //                              exact_pressure3D,
+        //                              tmp);
+        //     constraints_pressure.distribute(tmp);
+        //     pressure_solution = tmp;
+        // }
+
         output_results();
-
-        std::cout << compute_error(VectorTools::L2_norm) << std::endl;
-        std::cout << compute_error(VectorTools::H1_norm) << std::endl;
-    }
-}
-
-template <unsigned int dim>
-void IncrementalChorinTemam<dim>::compute_lift_drag()
-{
-    // -------------------------------------------------
-    // 1) Setup for face integration
-    // -------------------------------------------------
-    // Face quadrature for integration over the boundary
-    const unsigned int face_quad_degree = 3;
-    QGaussSimplex<dim - 1> face_quadrature_formula(face_quad_degree);
-
-    // We will need separate FEFaceValues objects for velocity and pressure:
-    FEFaceValues<dim> fe_face_values_velocity(
-        fe_velocity,
-        face_quadrature_formula,
-        update_values | update_gradients | update_JxW_values | update_normal_vectors);
-
-    FEFaceValues<dim> fe_face_values_pressure(
-        fe_pressure,
-        face_quadrature_formula,
-        update_values | update_JxW_values);
-    // ^ For pressure, we only need values (not gradients) if we do -p*I
-
-    const unsigned int n_face_q_points = face_quadrature_formula.size();
-
-    // We'll store velocity gradients and pressure values at the quadrature points
-    std::vector<Tensor<2, dim>> velocity_gradients(n_face_q_points);
-    std::vector<double> pressure_values(n_face_q_points);
-
-    // Local partial sums of drag and lift on this MPI rank
-    double local_drag = 0.0;
-    double local_lift = 0.0;
-
-    // -------------------------------------------------
-    // 2) Loop over cells and faces to integrate traction
-    // -------------------------------------------------
-    // We assume mesh, dof_handler_velocity, and dof_handler_pressure
-    // have the same Triangulation. So you can iterate them in parallel.
-    auto cell_v = dof_handler_velocity.begin_active();
-    auto cell_p = dof_handler_pressure.begin_active();
-    const auto end_v = dof_handler_velocity.end();
-
-    for (; cell_v != end_v; ++cell_v, ++cell_p)
-    {
-        if (!cell_v->is_locally_owned())
-            continue;
-
-        // Loop over faces:
-        for (unsigned int f = 0; f < GeometryInfo<dim>::faces_per_cell; ++f)
-        {
-            // Check if this face is on the boundary of interest
-            if (cell_v->face(f)->at_boundary() && (cell_v->face(f)->boundary_id() == 4))
-            {
-                // Reinit face-values for velocity and pressure
-                fe_face_values_velocity.reinit(cell_v, f);
-                fe_face_values_pressure.reinit(cell_p, f);
-
-                // Extract velocity gradients at these face quadrature points
-                fe_face_values_velocity[FEValuesExtractors::Vector(0)]
-                    .get_function_gradients(velocity_solution, velocity_gradients);
-
-                // Extract pressure values at these face quadrature points
-                // (fe_pressure is scalar => use FEValuesExtractors::Scalar(0))
-                fe_face_values_pressure[FEValuesExtractors::Scalar(0)]
-                    .get_function_values(pressure_solution, pressure_values);
-
-                // Now compute traction contributions
-                for (unsigned int q = 0; q < n_face_q_points; ++q)
-                {
-                    const double p = pressure_values[q];
-                    const Tensor<2, dim> grad_u = velocity_gradients[q];
-                    const Tensor<1, dim> normal_vec = fe_face_values_velocity.normal_vector(q);
-                    const double JxW = fe_face_values_velocity.JxW(q);
-
-                    // If you want the symmetric gradient:
-                    //   sym_grad_u = 0.5 * (grad_u + transpose(grad_u))
-                    //   Here just do 2*nu*sym_grad_u = nu*(grad_u + grad_u^T)
-                    //   so that fluid_stress = -p*I + 2*nu e(u).
-                    // Or if you are consistent with your code in assemble, you might
-                    // just do fluid_stress = -p I + nu*grad_u, etc.
-
-                    Tensor<2, dim> sym_grad_u;
-                    for (unsigned int d_i = 0; d_i < dim; ++d_i)
-                        for (unsigned int d_j = 0; d_j < dim; ++d_j)
-                            sym_grad_u[d_i][d_j] = 0.5 * (grad_u[d_i][d_j] + grad_u[d_j][d_i]);
-
-                    // Construct the stress tensor = -p I + 2 nu e(u)
-                    Tensor<2, dim> fluid_stress;
-                    for (unsigned int d = 0; d < dim; ++d)
-                        fluid_stress[d][d] = -p; // diagonal entries for -p*I
-
-                    // Add 2 nu e(u)
-                    for (unsigned int d_i = 0; d_i < dim; ++d_i)
-                        for (unsigned int d_j = 0; d_j < dim; ++d_j)
-                            fluid_stress[d_i][d_j] += 2.0 * nu * sym_grad_u[d_i][d_j];
-
-                    // Traction = fluid_stress * normal
-                    const Tensor<1, dim> traction = fluid_stress * normal_vec;
-
-                    // Multiply by area element JxW
-                    const Tensor<1, dim> force_contribution = traction * JxW;
-
-                    // The x-component is "drag", the y-component is "lift" (2D assumption)
-                    local_drag += force_contribution[0];
-                    local_lift += force_contribution[1];
-                } // end q-point loop
-            }
-        } // end face loop
-    } // end cell loop
-
-    // -------------------------------------------------
-    // 3) Use MPI to sum up partial forces to root = rank 0
-    // -------------------------------------------------
-    double global_drag = 0.0, global_lift = 0.0;
-    MPI_Allreduce(&local_drag, &global_drag, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&local_lift, &global_lift, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    // -------------------------------------------------
-    // 4) Compute pressure difference between points p1 & p2
-    // -------------------------------------------------
-    // We only need the pressure dof_handler & solution here.
-    // For each point, we'll see if it is "available" locally; if so,
-    // we do point_value and send it to rank 0.  One simple approach:
-    Point<dim> p1, p2;
-    p1[0] = 0.15;
-    p1[1] = 0.20;
-    p2[0] = 0.25;
-    p2[1] = 0.20;
-
-    // Because pressure is scalar, we can store it in a double
-    double local_p1 = 0.0, local_p2 = 0.0;
-    bool have_p1 = false, have_p2 = false;
-
-    try
-    {
-        local_p1 = VectorTools::point_value(dof_handler_pressure, pressure_solution, p1);
-        have_p1 = true;
-    }
-    catch (...)
-    {
-        // This rank does not have p1
-    }
-    try
-    {
-        local_p2 = VectorTools::point_value(dof_handler_pressure, pressure_solution, p2);
-        have_p2 = true;
-    }
-    catch (...)
-    {
-        // This rank does not have p2
-    }
-
-    // Send to root.  Alternatively, you can gather from all ranks, but
-    // typically only one rank "owns" a given point in a distributed mesh.
-    double p1_on_root = 0.0, p2_on_root = 0.0;
-    int rank_p1 = -1;
-    int rank_p2 = -1;
-
-    // If we found p1, send it to root:
-    if (have_p1)
-    {
-        MPI_Send(&local_p1, 1, MPI_DOUBLE, 0, 111, MPI_COMM_WORLD);
-        MPI_Send(&mpi_rank, 1, MPI_INT, 0, 112, MPI_COMM_WORLD);
-    }
-    // If we found p2, send it to root:
-    if (have_p2)
-    {
-        MPI_Send(&local_p2, 1, MPI_DOUBLE, 0, 221, MPI_COMM_WORLD);
-        MPI_Send(&mpi_rank, 1, MPI_INT, 0, 222, MPI_COMM_WORLD);
-    }
-
-    // Only root receives
-    if (mpi_rank == 0)
-    {
-        MPI_Status status;
-        // We expect exactly one sender for p1, so:
-        MPI_Recv(&p1_on_root, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 111, MPI_COMM_WORLD, &status);
-        MPI_Recv(&rank_p1, 1, MPI_INT, status.MPI_SOURCE, 112, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        // Same for p2:
-        MPI_Recv(&p2_on_root, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 221, MPI_COMM_WORLD, &status);
-        MPI_Recv(&rank_p2, 1, MPI_INT, status.MPI_SOURCE, 222, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        const double p_diff = p1_on_root - p2_on_root;
-
-        // -------------------------------------------------
-        // 5) Print or write to a file
-        // -------------------------------------------------
-        // std::cout << "Time = " << time << "  Drag = " << global_drag
-        //           << "  Lift = " << global_lift
-        //           << "  p_diff(p1-p2) = " << p_diff << std::endl;
-
-        // Append to a CSV file:
-
-        std::string output_dir = get_output_directory();
-
-        std::string filename = output_dir + "lift_drag_output.csv";
-
-        std::ofstream out_file(filename.c_str(), std::ios::app);
-        out_file << time << ","
-                 << global_drag << ","
-                 << global_lift << ","
-                 << p_diff << "\n";
-        out_file.close();
     }
 }
 
@@ -888,7 +685,7 @@ std::string IncrementalChorinTemam<dim>::get_output_directory()
 
     fs::path sub_dir_path = "";
 
-    std::string sub_dir_name = "outputs_reynolds_" + std::to_string(static_cast<int>(reynolds_number));
+    std::string sub_dir_name = "outputs_";
     if constexpr (dim == 2)
         sub_dir_path = "./outputs/IncrementalChorinTemam2D/" + sub_dir_name + "/";
     else if constexpr (dim == 3)
@@ -903,71 +700,67 @@ std::string IncrementalChorinTemam<dim>::get_output_directory()
 }
 
 template <unsigned int dim>
-double IncrementalChorinTemam<dim>::compute_error(const VectorTools::NormType &norm_type)
+double IncrementalChorinTemam<dim>::compute_error_velocity(const VectorTools::NormType &norm_type)
 {
-    // Define the quadrature for error computation
-    const unsigned int quad_deg = fe_velocity.degree + 2; // Degree of quadrature rule
-    QGaussSimplex<dim> quadrature_formula(quad_deg);
-
-    // Define FEValues object for extracting velocity components
-    FEValues<dim> fe_values(fe_velocity, quadrature_formula,
-                            update_values | update_quadrature_points | update_JxW_values);
-
-    // Exact solution setup
+    FE_SimplexP<dim> fe_linear(degree_velocity);
+    MappingFE mapping(fe_linear);
+    const QGaussSimplex<dim> quadrature_error = QGaussSimplex<dim>(degree_velocity + 2);
     if constexpr (dim == 2)
         exact_velocity2D.set_time(time);
-    else if constexpr (dim == 3)
+    if constexpr (dim == 3)
         exact_velocity3D.set_time(time);
+    Vector<double> error_per_cell;
+    if constexpr (dim == 2)
+        VectorTools::integrate_difference(mapping,
+                                          dof_handler_velocity,
+                                          update_velocity_solution,
+                                          exact_velocity2D,
+                                          error_per_cell,
+                                          quadrature_error,
+                                          norm_type);
+    if constexpr (dim == 3)
+        VectorTools::integrate_difference(mapping,
+                                          dof_handler_velocity,
+                                          update_velocity_solution,
+                                          exact_velocity3D,
+                                          error_per_cell,
+                                          quadrature_error,
+                                          norm_type);
+    const double error =
+        VectorTools::compute_global_error(mesh, error_per_cell, norm_type);
+    return error;
+}
 
-    // Containers to hold exact and computed values
-    std::vector<Vector<double>> exact_velocity3D_values(quadrature_formula.size(), Vector<double>(dim));
-    std::vector<Tensor<1, dim>> computed_velocity_values(quadrature_formula.size());
-
-    double local_error = 0.0;
-
-    for (const auto &cell : dof_handler_velocity.active_cell_iterators())
-    {
-        if (!cell->is_locally_owned())
-            continue;
-
-        fe_values.reinit(cell);
-
-        // Extract the computed velocity at quadrature points
-        fe_values[FEValuesExtractors::Vector(0)].get_function_values(update_velocity_solution, computed_velocity_values);
-
-        // Compute the exact velocity at quadrature points
-        if constexpr (dim == 2)
-            exact_velocity2D.vector_value_list(fe_values.get_quadrature_points(), exact_velocity3D_values);
-        else if constexpr (dim == 3)
-            exact_velocity3D.vector_value_list(fe_values.get_quadrature_points(), exact_velocity3D_values);
-
-        // Convert exact_velocity3D_values to Tensor<1, dim>
-        std::vector<Tensor<1, dim>> exact_velocity3D_tensors(quadrature_formula.size());
-        for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-        {
-            for (unsigned int i = 0; i < dim; ++i)
-            {
-                exact_velocity3D_tensors[q][i] = exact_velocity3D_values[q][i];
-            }
-        }
-
-        // Integrate the error over the cell
-        for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-        {
-            const double JxW = fe_values.JxW(q);
-
-            // Compute the L2-norm of the error at this quadrature point
-            Tensor<1, dim> error = computed_velocity_values[q] - exact_velocity3D_tensors[q];
-            local_error += error.norm_square() * JxW;
-        }
-    }
-
-    // Reduce the error across all processes
-    double global_error = 0.0;
-    MPI_Allreduce(&local_error, &global_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    // Return the square root of the global error for the L2 norm
-    return std::sqrt(global_error);
+template <unsigned int dim>
+double IncrementalChorinTemam<dim>::compute_error_pressure(const VectorTools::NormType &norm_type)
+{
+    FE_SimplexP<dim> fe_linear(degree_pressure);
+    MappingFE mapping(fe_linear);
+    const QGaussSimplex<dim> quadrature_error(degree_pressure + 2);
+    if constexpr (dim == 2)
+        exact_pressure2D.set_time(time);
+    else if constexpr (dim == 3)
+        exact_pressure3D.set_time(time);
+    Vector<double> error_per_cell;
+    if constexpr (dim == 2)
+        VectorTools::integrate_difference(mapping,
+                                          dof_handler_pressure,
+                                          pressure_solution,
+                                          exact_pressure2D,
+                                          error_per_cell,
+                                          quadrature_error,
+                                          norm_type);
+    else if constexpr (dim == 3)
+        VectorTools::integrate_difference(mapping,
+                                          dof_handler_pressure,
+                                          pressure_solution,
+                                          exact_pressure3D,
+                                          error_per_cell,
+                                          quadrature_error,
+                                          norm_type);
+    const double error =
+        VectorTools::compute_global_error(mesh, error_per_cell, norm_type);
+    return error;
 }
 
 template <unsigned int dim>

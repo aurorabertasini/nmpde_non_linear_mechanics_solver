@@ -193,6 +193,7 @@ public:
 
     protected:
     };
+
     class ExactVelocity2D : public Function<dim>
     {
     public:
@@ -218,6 +219,36 @@ public:
                 return -M_PI * sin(t) * sin(2.0 * M_PI * p[0]) * pow(sin(M_PI * p[1]), 2);
             else
                 return 0.0;
+        }
+
+        virtual Tensor<1, dim>
+        gradient(
+            const Point<dim> &p, const unsigned int component) const
+        {
+            Tensor<1, dim> result;
+            double t = this->get_time();
+            double x = p[0];
+            double y = p[1];
+
+            if (component == 0)
+            {
+                result[0] = 2.0 * M_PI * M_PI * sin(t) * sin(2.0 * M_PI * y) * sin(M_PI * x) * cos(M_PI * x);
+                result[1] = 2.0 * M_PI * M_PI * sin(t) * cos(2.0 * M_PI * y) * pow(sin(M_PI * x), 2);
+            }
+            else if (component == 1)
+            {
+                result[0] = -2.0 * M_PI * M_PI * sin(t) * cos(2.0 * M_PI * x) * pow(sin(M_PI * y), 2);
+                result[1] = -2.0 * M_PI * M_PI * sin(t) * sin(2.0 * M_PI * x) * sin(M_PI * y) * cos(M_PI * y);
+            }
+            return result;
+        }
+        virtual void vector_gradient(
+            const Point<dim> &p, std::vector<Tensor<1, dim>> &values) const
+        {
+            for (unsigned int i = 0; i < dim; i++)
+            {
+                values[i] = gradient(p, i);
+            }
         }
     };
 
@@ -338,7 +369,7 @@ public:
         virtual void vector_gradient(
             const Point<dim> &p, std::vector<Tensor<1, dim>> &values) const
         {
-            for (unsigned int i = 0; i < dim + 1; i++)
+            for (unsigned int i = 0; i < dim; i++)
             {
                 values[i] = gradient(p, i);
             }
@@ -446,9 +477,15 @@ public:
                            const unsigned int &degree_velocity_,
                            const unsigned int &degree_pressure_,
                            const double &T_,
-                           const double &deltat_,
-                           const double &reynolds_number_);
+                           const double &deltat_);
 
+    void run();
+
+    double compute_error_velocity(const VectorTools::NormType &norm_type);
+
+    double compute_error_pressure(const VectorTools::NormType &norm_type);
+
+private:
     void setup();
 
     void assemble_system_velocity();
@@ -465,17 +502,10 @@ public:
 
     void output_results();
 
-    void run();
-
-    void compute_lift_drag();
+    void update_buondary_conditions();
 
     std::string get_output_directory();
 
-    double compute_error(const VectorTools::NormType &norm_type);
-
-    void update_buondary_conditions();
-
-private:
     Triangulation<dim> triangulation;
 
     // Velocity FE: Q2 vector
@@ -520,11 +550,9 @@ private:
     double time = 0;
 
     // Viscosity
-    const double nu = 1.;
+    double nu = 1.;
 
     unsigned int time_step = 0;
-
-    const double reynolds_number;
 
     const double cylinder_radius = 0.1;
 
@@ -585,8 +613,7 @@ IncrementalChorinTemam<dim>::IncrementalChorinTemam(
     const unsigned int &degree_velocity_,
     const unsigned int &degree_pressure_,
     const double &T_,
-    const double &deltat_,
-    const double &reynolds_number_)
+    const double &deltat_)
     : fe_velocity(FE_SimplexP<dim>(2), dim),
       dof_handler_velocity(triangulation),
       fe_pressure(1),
@@ -594,7 +621,6 @@ IncrementalChorinTemam<dim>::IncrementalChorinTemam(
       mesh_file_name(mesh_file_name_),
       degree_velocity(degree_velocity_),
       degree_pressure(degree_pressure_),
-      reynolds_number(reynolds_number_),
       T(T_),
       deltat(deltat_),
       mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)),
