@@ -555,7 +555,7 @@ void IncrementalChorinTemam<dim>::run()
 
         // pressure_solution = old_pressure + deltap;
 
-        pressure_solution.add(deltap);
+        pressure_update(rotational);
 
         output_results();
         // compute_lift_drag();
@@ -809,6 +809,142 @@ std::string IncrementalChorinTemam<dim>::get_output_directory()
 
     return sub_dir_path.string();
 }
+
+template <unsigned int dim>
+void IncrementalChorinTemam<dim>::pressure_update(const bool rotational)
+{
+    // Non-rotational variant: just p^{n+1} = p^n + deltap
+    if (!rotational)
+    {
+        pressure_solution.add(deltap); // p^{n+1} = p^n + Δp
+        return;
+    }
+
+    // -------------------------
+    // Rotational variant:
+    // p^{n+1} = p^n + Δp - ν * div(u_tilde)
+    // We must project div(u_tilde) onto the same FE space as p.
+    // -------------------------
+
+    // 1) Build an L2 mass matrix for the pressure FE space
+    TrilinosWrappers::SparseMatrix mass_matrix;
+    {
+        TrilinosWrappers::SparsityPattern dsp_p(locally_owned_pressure, MPI_COMM_WORLD);
+        // Make sure we use the same constraints as for pressure (hanging nodes, BCs)
+        DoFTools::make_sparsity_pattern(dof_handler_pressure,
+                                        dsp_p,
+                                        constraints_pressure,
+                                        /*keep_constrained_dofs*/ false);
+        dsp_p.compress();
+        mass_matrix.reinit(dsp_p);
+    }
+    mass_matrix = 0.0;
+
+    // 2) Build the RHS for the L2-projection of div(u_tilde)
+    TrilinosWrappers::MPI::Vector rhs(locally_owned_pressure, MPI_COMM_WORLD);
+    rhs = 0.0;
+
+    const unsigned int quad_deg = std::max<unsigned int>(2u, fe_pressure.degree + 1u);
+    QGaussSimplex<dim> quadrature_formula(quad_deg);
+
+    FEValues<dim> fe_values_p(fe_pressure,
+                              quadrature_formula,
+                              update_values | update_quadrature_points | update_JxW_values);
+
+    FEValues<dim> fe_values_v(fe_velocity,
+                              quadrature_formula,
+                              update_values | update_gradients | update_quadrature_points);
+
+    const unsigned int n_q = quadrature_formula.size();
+    const unsigned int dofs_per_cell_p = fe_pressure.dofs_per_cell;
+
+    FullMatrix<double> cell_mass(dofs_per_cell_p, dofs_per_cell_p);
+    Vector<double> cell_rhs(dofs_per_cell_p);
+    std::vector<types::global_dof_index> local_indices(dofs_per_cell_p);
+
+    // To read the velocity divergence:
+    std::vector<double> local_div_u_tilde(n_q);
+
+    // Extractor for the velocity field in the velocity FE:
+    const FEValuesExtractors::Vector velocity_extract(0);
+
+    // Loop over cells of the pressure and velocity DoFHandlers in parallel
+    auto cell_p = dof_handler_pressure.begin_active();
+    auto cell_v = dof_handler_velocity.begin_active();
+    const auto end_p = dof_handler_pressure.end();
+
+    for (; cell_p != end_p; ++cell_p, ++cell_v)
+    {
+        if (!cell_p->is_locally_owned())
+            continue;
+
+        fe_values_p.reinit(cell_p);
+        fe_values_v.reinit(cell_v);
+
+        // Get div(u_tilde) at quadrature points
+        fe_values_v[velocity_extract].get_function_divergences(velocity_solution, local_div_u_tilde);
+
+        cell_mass = 0.0;
+        cell_rhs = 0.0;
+
+        cell_p->get_dof_indices(local_indices);
+
+        for (unsigned int q = 0; q < n_q; ++q)
+        {
+            const double div_val = local_div_u_tilde[q];
+            const double JxW    = fe_values_p.JxW(q);
+
+            for (unsigned int i = 0; i < dofs_per_cell_p; ++i)
+            {
+                const double phi_i = fe_values_p.shape_value(i, q);
+                for (unsigned int j = 0; j < dofs_per_cell_p; ++j)
+                {
+                    const double phi_j = fe_values_p.shape_value(j, q);
+                    // Mass matrix contribution
+                    cell_mass(i, j) += (phi_i * phi_j) * JxW;
+                }
+                // RHS = ∫ div(u_tilde) * phi_i
+                cell_rhs(i) += (div_val * phi_i) * JxW;
+            }
+        }
+
+        // Add local contributions to global mass matrix & RHS
+        constraints_pressure.distribute_local_to_global(cell_mass,
+                                                        cell_rhs,
+                                                        local_indices,
+                                                        mass_matrix,
+                                                        rhs);
+    } // end cell loop
+
+    mass_matrix.compress(VectorOperation::add);
+    rhs.compress(VectorOperation::add);
+
+    // 3) Solve M * (divProj) = rhs for the L2-projection of div(u_tilde)
+    TrilinosWrappers::MPI::Vector div_projected(locally_owned_pressure, MPI_COMM_WORLD);
+
+    {
+        SolverControl solver_control(2000, 1e-12 * rhs.l2_norm());
+        SolverCG<TrilinosWrappers::MPI::Vector> solver_cg(solver_control);
+
+        TrilinosWrappers::PreconditionIC prec;
+        prec.initialize(mass_matrix);
+
+        solver_cg.solve(mass_matrix, div_projected, rhs, prec);
+        constraints_pressure.distribute(div_projected);
+
+        if (mpi_rank == 0)
+            std::cout << "Pressure update CG iterations: " << solver_control.last_step() << std::endl;
+    }
+
+    // 4) Now apply the update:
+    // p^{n+1} = p^n + Δp - ν * div_projected
+    // (The user formula does not have a Δt factor, but add it if your scheme needs it.)
+    pressure_solution.add(deltap);           // p^{n+1} = p^n + Δp
+    pressure_solution.add(-nu, div_projected); // p^{n+1} -= ν * div(u_tilde)
+
+    pressure_solution.update_ghost_values();
+}
+
 
 template class IncrementalChorinTemam<2>;
 template class IncrementalChorinTemam<3>;

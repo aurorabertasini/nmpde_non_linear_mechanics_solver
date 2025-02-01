@@ -285,7 +285,7 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
             for (unsigned int f = 0; f < cell->n_faces(); ++f)
             {
                 if (cell->face(f)->at_boundary() &&
-                    cell->face(f)->boundary_id() == 2)
+                    cell->face(f)->boundary_id() == 1)
                 {
 
                     fe_face_values.reinit(cell, f);
