@@ -9,6 +9,10 @@ int main(int argc, char *argv[])
     const unsigned int mpi_rank =
         Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
+    int mpi_size; 
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
     if (mpi_rank == 0)
     {
         std::cout << "Welcome to the Navier-Stokes solver" << std::endl;
@@ -112,5 +116,7 @@ int main(int argc, char *argv[])
         std::cout << "Elapsed time: " << elapsed.count() << " s\n";
         std::cout << std::endl
                   << "THE END" << std::endl;
+
+        std::cout << "Number of Processors: " << mpi_size << std::endl;
     }
 }

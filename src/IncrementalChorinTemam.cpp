@@ -3,8 +3,8 @@
 template <unsigned int dim>
 void IncrementalChorinTemam<dim>::setup()
 {
-
-    std::cout << "Initializing the mesh" << std::endl;
+    if (mpi_rank == 0)
+        std::cout << "Initializing the mesh" << std::endl;
 
     Triangulation<dim> mesh_serial;
 
@@ -35,45 +35,23 @@ void IncrementalChorinTemam<dim>::setup()
     constraints_velocity.reinit(locally_relevant_velocity);
     DoFTools::make_hanging_node_constraints(dof_handler_velocity, constraints_velocity);
 
-    // Inlet velocity on boundary ID = 1:
-    if constexpr (dim == 2)
-    {
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/1,
-                                                 InletVelocity(H),
-                                                 constraints_velocity);
+    VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                             /*boundary_id=*/0,
+                                             InletVelocity(H),
+                                             constraints_velocity);
 
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/3,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 constraints_velocity);
+    // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
+    VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                             /*boundary_id=*/2,
+                                             Functions::ZeroFunction<dim>(dim),
+                                             constraints_velocity);
 
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/4,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 constraints_velocity);
-    }
-    else if constexpr (dim == 3)
-    {
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/2,
-                                                 InletVelocity(H),
-                                                 constraints_velocity);
+    // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
+    VectorTools::interpolate_boundary_values(dof_handler_velocity,
+                                             /*boundary_id=*/3,
+                                             Functions::ZeroFunction<dim>(dim),
+                                             constraints_velocity);
 
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/4,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 constraints_velocity);
-
-        // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
-        VectorTools::interpolate_boundary_values(dof_handler_velocity,
-                                                 /*boundary_id=*/5,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 constraints_velocity);
-    }
     constraints_velocity.close();
 
     //-----------------------------
@@ -87,19 +65,13 @@ void IncrementalChorinTemam<dim>::setup()
     constraints_pressure.clear();
     constraints_pressure.reinit(locally_relevant_pressure);
     DoFTools::make_hanging_node_constraints(dof_handler_pressure, constraints_pressure);
-    // Fix pressure=0 on boundary to remove nullspace
-    if constexpr (dim == 2)
-        VectorTools::interpolate_boundary_values(
-            dof_handler_pressure,
-            2,
-            Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
-            constraints_pressure);
-    else if constexpr (dim == 3)
-        VectorTools::interpolate_boundary_values(
-            dof_handler_pressure,
-            3,
-            Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
-            constraints_pressure);
+
+    VectorTools::interpolate_boundary_values(
+        dof_handler_pressure,
+        1,
+        Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
+        constraints_pressure);
+
     constraints_pressure.close();
 
     //-----------------------------
@@ -517,7 +489,7 @@ void IncrementalChorinTemam<dim>::output_results()
     // Usa un tempo formattato con padding (es. 000, 001, ..., 010)
     std::ostringstream fname;
     // fname << output_dir.c_str();
-    fname << "solution-0_" ;
+    fname << "solution-0_";
 
     std::ofstream out(fname.str());
     data_out.write_vtu_with_pvtu_record(output_dir,
