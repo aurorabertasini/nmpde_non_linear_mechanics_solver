@@ -98,32 +98,72 @@ void MonolithicNavierStokes::setup()
         pcout << "Initializing the linear system" << std::endl;
         pcout << "  Initializing the sparsity pattern" << std::endl;
 
-        Table<2, DoFTools::Coupling> coupling_system(dim + 1, dim + 1);
+        Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
         for (unsigned int c = 0; c < dim + 1; ++c)
         {
             for (unsigned int d = 0; d < dim + 1; ++d)
             {
                 if (c == dim && d == dim) // pressure-pressure term
-                    coupling_system[c][d] = DoFTools::none;
+                    coupling[c][d] = DoFTools::none;
                 else // other combinations
-                    coupling_system[c][d] = DoFTools::always;
+                    coupling[c][d] = DoFTools::always;
             }
         }
 
-        TrilinosWrappers::BlockSparsityPattern sparsity_system(block_owned_dofs,
-                                                               MPI_COMM_WORLD);
-        DoFTools::make_sparsity_pattern(dof_handler, coupling_system, sparsity_system);
+        TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
+                                                    MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
+    sparsity.compress();
 
-        sparsity_system.compress();
-
-        system_matrix.reinit(sparsity_system);
-
-        pcout << "  Initializing the system right-hand side" << std::endl;
-        system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
-        pcout << "  Initializing the solution vector" << std::endl;
-        solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
-        solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
+    // Do the same for the velocity mass term.
+    for (unsigned int c = 0; c < dim + 1; ++c) {
+      for (unsigned int d = 0; d < dim + 1; ++d) {
+        if (c == dim || d == dim)  // terms with pressure
+          coupling[c][d] = DoFTools::none;
+        else  // terms with no pressure
+          coupling[c][d] = DoFTools::always;
+      }
     }
+
+    TrilinosWrappers::BlockSparsityPattern velocity_mass_sparsity(
+        block_owned_dofs, MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler, coupling,
+                                    velocity_mass_sparsity);
+    velocity_mass_sparsity.compress();
+
+    // Do the same for the pressure mass term.
+    TrilinosWrappers::BlockSparsityPattern pressure_mass_sparsity(
+        block_owned_dofs, MPI_COMM_WORLD);
+    if (true) {
+      for (unsigned int c = 0; c < dim + 1; ++c) {
+        for (unsigned int d = 0; d < dim + 1; ++d) {
+          if (c == dim && d == dim)  // terms with only pressure
+            coupling[c][d] = DoFTools::always;
+          else  // terms with velocity
+            coupling[c][d] = DoFTools::none;
+        }
+      }
+
+      DoFTools::make_sparsity_pattern(dof_handler, coupling,
+                                      pressure_mass_sparsity);
+      pressure_mass_sparsity.compress();
+    }
+
+    pcout << "  Initializing the matrices" << std::endl;
+
+    system_matrix.reinit(sparsity);
+    velocity_mass.reinit(velocity_mass_sparsity);
+    if (true) {
+      pressure_mass.reinit(pressure_mass_sparsity);
+    }
+
+    pcout << "  Initializing the system right-hand side" << std::endl;
+    system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
+
+    pcout << "  Initializing the solution vector" << std::endl;
+    solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
+    solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
+  }
 }
 
 void MonolithicNavierStokes::assemble_base_matrix()
@@ -140,10 +180,20 @@ void MonolithicNavierStokes::assemble_base_matrix()
 
     std::vector<types::global_dof_index> dof_indices(dofs_per_cell);
 
-    std::vector<Tensor<1, dim>> previous_velocity_values(n_q); // /!!!!!!l
+    std::vector<Tensor<1, dim>> previous_velocity_values(n_q);
     std::vector<double> previous_velocity_divergence(n_q);
 
     system_matrix = 0.0;
+    // std::cout << "system_matrix initialized to 0.0" << std::endl;
+    FullMatrix<double> velocity_mass_cell_matrix(dofs_per_cell, dofs_per_cell);
+    FullMatrix<double> pressure_mass_cell_matrix(dofs_per_cell, dofs_per_cell);
+    pressure_mass_cell_matrix = 0.0;
+    // std::cout << "pressure_mass_cell_matrix initialized to 0.0" << std::endl;
+    velocity_mass = 0.0;
+    pressure_mass = 0.0;
+    // std::cout << "pressure_mass initialized to 0.0" << std::endl;
+
+    // std::cout << "Starting assembly of base matrix" << std::endl;
 
     for (const auto &cell : dof_handler.active_cell_iterators())
     {
@@ -151,6 +201,7 @@ void MonolithicNavierStokes::assemble_base_matrix()
             continue;
 
         fe_values.reinit(cell);
+        // std::cout << "fe_values reinitialized for cell" << std::endl;
 
         std::vector<double> div_phi_u(dofs_per_cell);
         std::vector<Tensor<1, dim>> phi_u(dofs_per_cell);
@@ -158,13 +209,15 @@ void MonolithicNavierStokes::assemble_base_matrix()
         std::vector<double> phi_p(dofs_per_cell);
 
         fe_values[velocity].get_function_values(solution_owned, previous_velocity_values);
+        // std::cout << "previous_velocity_values obtained" << std::endl;
         fe_values[velocity].get_function_divergences(solution_owned, previous_velocity_divergence);
-
+        // std::cout << "previous_velocity_divergence obtained" << std::endl;
+        velocity_mass_cell_matrix = 0.0;
         cell_system_matrix = 0.0;
+        // std::cout << "cell_system_matrix initialized to 0.0" << std::endl;
 
         for (unsigned int q = 0; q < n_q; ++q)
         {
-
             for (unsigned int k = 0; k < dofs_per_cell; k++)
             {
                 div_phi_u[k] = fe_values[velocity].divergence(k, q);
@@ -172,6 +225,7 @@ void MonolithicNavierStokes::assemble_base_matrix()
                 phi_u[k] = fe_values[velocity].value(k, q);
                 phi_p[k] = fe_values[pressure].value(k, q);
             }
+            // std::cout << "Values at quadrature point " << q << " obtained" << std::endl;
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
@@ -179,29 +233,39 @@ void MonolithicNavierStokes::assemble_base_matrix()
                 {
                     // mass component
                     cell_system_matrix(i, j) += scalar_product(phi_u[i], phi_u[j]) / deltat * fe_values.JxW(q);
-
+                    velocity_mass_cell_matrix(i, j) += scalar_product(phi_u[i], phi_u[j]) / deltat * fe_values.JxW(q);
                     // stiffness component
                     cell_system_matrix(i, j) += nu * scalar_product(grad_phi_u[i], grad_phi_u[j]) * fe_values.JxW(q);
-
                     // Pressure term in the momentum equation
                     cell_system_matrix(i, j) -= phi_p[i] * div_phi_u[j] * fe_values.JxW(q);
-
                     // Pressure term in the continuity equation
                     cell_system_matrix(i, j) -= phi_p[j] * div_phi_u[i] * fe_values.JxW(q);
-
                     // Non-linear term
-                    cell_system_matrix(i, j) += scalar_product(grad_phi_u[j] * previous_velocity_values[q], phi_u[i]) * fe_values.JxW(q); // prodotto scalare !!!!
-
+                    cell_system_matrix(i, j) += scalar_product(grad_phi_u[j] * previous_velocity_values[q], phi_u[i]) * fe_values.JxW(q);
                     // skew-symmetric term
                     cell_system_matrix(i, j) += 0.5 * previous_velocity_divergence[q] * scalar_product(phi_u[i], phi_u[j]) * fe_values.JxW(q);
+
+                    pressure_mass_cell_matrix(i, j) += fe_values[pressure].value(j, q) *
+                                               fe_values[pressure].value(i, q) /
+                                               nu * fe_values.JxW(q);
                 }
             }
+            // std::cout << "cell_system_matrix and pressure_mass_cell_matrix updated for quadrature point " << q << std::endl;
         }
         cell->get_dof_indices(dof_indices);
+        // std::cout << "dof_indices obtained for cell" << std::endl;
 
         system_matrix.add(dof_indices, cell_system_matrix);
+        velocity_mass.add(dof_indices, velocity_mass_cell_matrix);
+        pressure_mass.add(dof_indices, pressure_mass_cell_matrix); 
+        // std::cout << "system_matrix and pressure_mass updated for cell" << std::endl;
     }
-    // system_matrix.compress(VectorOperation::add);
+    system_matrix.compress(VectorOperation::add);
+    pressure_mass.compress(VectorOperation::add);
+    velocity_mass.compress(VectorOperation::add);
+    // std::cout << "system_matrix and pressure_mass compressed" << std::endl;
+
+    // std::cout << "Finished assembly of base matrix" << std::endl;
 }
 
 void MonolithicNavierStokes::assemble_rhs(const double &time)
@@ -261,22 +325,10 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
-
-                // cell_rhs(i) += scalar_product(forcing_term_new_tensor,
-                //                               fe_values[velocity].value(i, q)) *
-                //                fe_values.JxW(q) * theta;
-
-                // cell_rhs(i) += scalar_product(forcing_term_old_tensor,
-                //                               fe_values[velocity].value(i, q)) *
-                //                fe_values.JxW(q) * (1.0 - theta);
-
                 cell_rhs(i) += scalar_product(previous_velocity_values[q],
                                               fe_values[velocity].value(i, q)) *
                                fe_values.JxW(q) / deltat;
-                //                     if (i == 1 && q == 1)
-                //                     {
-                //                         pcout << "previous_velocity = " << previous_velocity_values[q] << std::endl;
-                //                     }
+
             }
         }
 
@@ -285,7 +337,7 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
             for (unsigned int f = 0; f < cell->n_faces(); ++f)
             {
                 if (cell->face(f)->at_boundary() &&
-                    cell->face(f)->boundary_id() == 1)
+                    cell->face(f)->boundary_id() == 2)
                 {
 
                     fe_face_values.reinit(cell, f);
@@ -309,7 +361,7 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
         system_rhs.add(dof_indices, cell_rhs);
     }
 
-    // system_rhs.compress(VectorOperation::add);
+    system_rhs.compress(VectorOperation::add);
 
     // We apply boundary conditions to the algebraic system.
     {
@@ -340,19 +392,94 @@ void MonolithicNavierStokes::assemble_rhs(const double &time)
 
 void MonolithicNavierStokes::solve_time_step()
 {
-    SolverControl solver_control(1000000, 1e-4);
+    // Choose the preconditioner type:
+    // 1 = BLOCK DIAGONAL, 2 = SIMPLE, 3 = ASIMPLE, 4 = YOSHIDA.
+    int precond_type = 3;  // Set this value as needed
 
+    // Local parameters for inner solvers and preconditioner initialization.
+    double alpha = 0.5;                // Damping parameter for SIMPLE-like preconditioners
+    unsigned int maxiter_inner = 10000;  // Maximum iterations for inner solvers
+    double tol_inner = 1e-5;             // Tolerance for inner solvers
+    bool use_ilu = true;               // Flag: true for ILU, false for AMG
+    bool use_inner_solver = true;      // Flag: true for inner GMRES, false for inner CG
+
+    // Set up the outer GMRES solver.
+    SolverControl solver_control(1000000, 1e-4);
     SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
 
-    PreconditionIdentity preconditioner;
+    std::shared_ptr<BlockPrecondition> block_precondition;
 
-    // pcout << "Solving the linear system" << std::endl;
+    // Select and initialize the preconditioner based on precond_type.
+    switch (precond_type)
+    {
+        case 1: { // BLOCK DIAGONAL preconditioner
+            auto block_diag_precondition = std::make_shared<PreconditionBlockDiagonal>();
+            block_diag_precondition->initialize(
+                system_matrix.block(0, 0),   // Velocity block (F_matrix)
+                pressure_mass.block(1, 1),     // Pressure block (mass matrix)
+                maxiter_inner,                 // Maximum iterations for inner solves
+                tol_inner,                      // Tolerance for inner solves
+                use_ilu
+            );
+            block_precondition = block_diag_precondition;
+            break;
+        }
+        case 2: { // SIMPLE preconditioner
+            auto simple_precondition = std::make_shared<PreconditionSIMPLE>();
+            simple_precondition->initialize(
+                system_matrix.block(0, 0),    // F_matrix
+                system_matrix.block(1, 0),    // -B_matrix (bottom-left block)
+                system_matrix.block(0, 1),    // B^T_matrix (top-right block)
+                solution_owned,               // Example block vector for temporary storage
+                alpha,                        // Damping parameter (alpha)
+                maxiter_inner,                // Maximum iterations for inner solves
+                tol_inner,                    // Tolerance for inner solves
+                use_ilu                       // Flag: true for ILU, false for AMG
+            );
+            block_precondition = simple_precondition;
+            break;
+        }
+        case 3: { // ASIMPLE preconditioner
+            auto asimple_precondition = std::make_shared<PreconditionaSIMPLE>();
+            asimple_precondition->initialize(
+          system_matrix.block(0, 0), system_matrix.block(1, 0),
+          system_matrix.block(0, 1), solution_owned, alpha,
+          use_inner_solver, maxiter_inner,
+          tol_inner, use_ilu);
+            block_precondition = asimple_precondition;
+            break;
+        }
+        case 4: { // YOSHIDA preconditioner
+            auto yoshida_precondition = std::make_shared<PreconditionYoshida>();
+            yoshida_precondition->initialize(
+          system_matrix.block(0, 0), system_matrix.block(1, 0),
+          system_matrix.block(0, 1), velocity_mass.block(0, 0), solution_owned,
+          maxiter_inner, 
+          tol_inner,
+          use_ilu);
+            block_precondition = yoshida_precondition;
+            break;
+        }
+        default:
+            Assert(false, ExcNotImplemented());
+    }
 
-    solver.solve(system_matrix, solution_owned, system_rhs, preconditioner);
-    pcout << "  " << solver_control.last_step() << " CG iterations" << std::endl;
+    // Solve the full system (velocity + pressure) using GMRES with the chosen preconditioner.
+    solver.solve(system_matrix,
+                 solution_owned,
+                 system_rhs,
+                 *block_precondition);
 
+    pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
+
+    // Update the ghosted solution for output or further usage.
     solution = solution_owned;
 }
+
+
+
+
+
 
 void MonolithicNavierStokes::solve()
 {
