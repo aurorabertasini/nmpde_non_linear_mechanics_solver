@@ -9,7 +9,7 @@
 
 void writeErrorsToFile(const std::string& filename,
                         const std::vector<double>& deltat_vector,
-                        const std::vector<double>& errors_L2_pressure,
+                        const std::vector<double>& errors_Linf_pressure,
                         const std::vector<double>& errors_L2_velocity,
                         const std::vector<double>& errors_H1_velocity)
 {
@@ -25,10 +25,10 @@ void writeErrorsToFile(const std::string& filename,
         outFile << std::scientific << "dt = " << std::setw(4)
                 << std::setprecision(2) << deltat_vector[i];
 
-        outFile << std::scientific << " | pL2 = " << errors_L2_pressure[i];
+        outFile << std::scientific << " | pLinf = " << errors_Linf_pressure[i];
         if (i > 0)
         {
-            double p = std::log(errors_L2_pressure[i] / errors_L2_pressure[i - 1]) /
+            double p = std::log(errors_Linf_pressure[i] / errors_Linf_pressure[i - 1]) /
                        std::log(deltat_vector[i] / deltat_vector[i - 1]);
             outFile << " (" << std::fixed << std::setprecision(2)
                     << std::setw(4) << p << ")";
@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
     std::filesystem::path mesh3DPath = "../mesh/cubeBenchmark3D.msh";
     int degreeVelocity = 2;
     int degreePressure = 1;
-    double simulationPeriod = 5.0;
+    double simulationPeriod = 1.0;
 
     int choice = 0;
 
@@ -120,9 +120,9 @@ int main(int argc, char *argv[])
     {
         std::ofstream out_file("time_convergence_analysis_chorin_temam.csv", std::ios::app);
 
-        out_file << "delta_t,pressure_L2_error,velocity_L2_error,velocity_H1_error" << std::endl;
+        out_file << "delta_t,pressure_Linf_error,velocity_L2_error,velocity_H1_error" << std::endl;
 
-        std::vector<double> errors_L2_pressure;
+        std::vector<double> errors_Linf_pressure;
         std::vector<double> errors_H1_velocity;
         std::vector<double> errors_L2_velocity;
         std::vector<double> deltat_vector;
@@ -137,15 +137,15 @@ int main(int argc, char *argv[])
             IncrementalChorinTemam<2> incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, deltat);
             incrementalChorinTemam.run();
 
-            double pressure_L2_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
+            double pressure_Linf_error = incrementalChorinTemam.compute_error_pressure(VectorTools::Linfty_norm);
             double velocity_L2_error = incrementalChorinTemam.compute_error_velocity(VectorTools::L2_norm);
             double velocity_H1_error = incrementalChorinTemam.compute_error_velocity(VectorTools::H1_norm);
 
             if (mpi_rank == 0)
             {
-                out_file << deltat << "," << pressure_L2_error << "," << velocity_L2_error << "," << velocity_H1_error << std::endl;
+                out_file << deltat << "," << pressure_Linf_error << "," << velocity_L2_error << "," << velocity_H1_error << std::endl;
 
-                errors_L2_pressure.push_back(pressure_L2_error);
+                errors_Linf_pressure.push_back(pressure_Linf_error);
                 errors_L2_velocity.push_back(velocity_L2_error);
                 errors_H1_velocity.push_back(velocity_H1_error);
             }
@@ -154,7 +154,7 @@ int main(int argc, char *argv[])
             count++;
         } while (count < number_of_delta_t_refinements);
 
-        writeErrorsToFile("time_convergence_analysis_chorin_temam_" + std::to_string(simulationPeriod) + ".txt", deltat_vector, errors_L2_pressure, errors_L2_velocity, errors_H1_velocity);
+        writeErrorsToFile("time_convergence_analysis_chorin_temam_" + std::to_string(simulationPeriod) + ".txt", deltat_vector, errors_Linf_pressure, errors_L2_velocity, errors_H1_velocity);
 
         break;
     }
@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
     {
         std::vector<std::string> meshFiles = {"../mesh/cubeBenchmark3D_1.msh", "../mesh/cubeBenchmark3D_2.msh", "../mesh/cubeBenchmark3D_3.msh", "../mesh/cubeBenchmark3D_4.msh"};
         std::ofstream out_file("space_convergence_analysis_chorin_temam_3D.csv", std::ios::app);
-        out_file << "mesh_file_name,pressure_L2_error,velocity_H1_error" << std::endl;
+        out_file << "mesh_file_name,pressure_Linf_error,velocity_H1_error" << std::endl;
 
         double number_of_time_steps = 400.0;
         double deltat = 1e-7;
@@ -172,12 +172,12 @@ int main(int argc, char *argv[])
             IncrementalChorinTemam<3> incrementalChorinTemam(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
             incrementalChorinTemam.run();
 
-            double pressure_L2_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
+            double pressure_Linf_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
             double velocity_H1_error = incrementalChorinTemam.compute_error_velocity(VectorTools::H1_norm);
 
             if (mpi_rank == 0)
             {
-                out_file << meshFile << "," << pressure_L2_error << "," << velocity_H1_error << std::endl;
+                out_file << meshFile << "," << pressure_Linf_error << "," << velocity_H1_error << std::endl;
             }
         }
         break;
@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
     {
         std::vector<std::string> meshFiles = {"../mesh/squareBenchmark2D_1000.msh", "../mesh/squareBenchmark2D_500.msh", "../mesh/squareBenchmark2D_250.msh", "../mesh/squareBenchmark2D_125.msh"};
         std::ofstream out_file("space_convergence_analysis_chorin_temam_2D.csv", std::ios::app);
-        out_file << "mesh_file_name,pressure_L2_error,velocity_H1_error" << std::endl;
+        out_file << "mesh_file_name,pressure_Linf_error,velocity_H1_error" << std::endl;
         double number_of_time_steps = 4.0;
         double deltat = 1e-10;
 
@@ -195,12 +195,12 @@ int main(int argc, char *argv[])
             IncrementalChorinTemam<2> incrementalChorinTemam(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
             incrementalChorinTemam.run();
 
-            double pressure_L2_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
+            double pressure_Linf_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
             double velocity_H1_error = incrementalChorinTemam.compute_error_velocity(VectorTools::H1_norm);
 
             if (mpi_rank == 0)
             {
-                out_file << meshFile << "," << pressure_L2_error << "," << velocity_H1_error << std::endl;
+                out_file << meshFile << "," << pressure_Linf_error << "," << velocity_H1_error << std::endl;
             }
         }
     }

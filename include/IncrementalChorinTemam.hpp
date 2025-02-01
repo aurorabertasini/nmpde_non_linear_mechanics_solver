@@ -506,6 +506,8 @@ private:
 
     std::string get_output_directory();
 
+    void pressure_update(bool rotational);
+
     Triangulation<dim> triangulation;
 
     // Velocity FE: Q2 vector
@@ -554,7 +556,7 @@ private:
 
     unsigned int time_step = 0;
 
-    const double cylinder_radius = 0.1;
+    bool rotational = true;
 
     ConditionalOStream pcout;
 
