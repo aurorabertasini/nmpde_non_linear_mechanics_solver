@@ -1,5 +1,5 @@
 #include "../include/MonolithicNavierStokes.hpp"
-#include "../include/IncrementalChorinTemam.hpp"
+#include "../include/UncoupledNavierStokes.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -82,8 +82,8 @@ int main(int argc, char *argv[])
         std::cout << "Welcome to the Numerical Analysis brench of the Navier-Stokes solver" << std::endl;
     }
 
-    std::filesystem::path mesh2DPath = "../mesh/squareBenchmark2D.msh";
-    std::filesystem::path mesh3DPath = "../mesh/cubeBenchmark3D.msh";
+    std::filesystem::path mesh2DPath = "../mesh/Square2D.msh";
+    std::filesystem::path mesh3DPath = "../mesh/Cube3D.msh";
     int degreeVelocity = 2;
     int degreePressure = 1;
     double simulationPeriod = 1.0;
@@ -134,12 +134,12 @@ int main(int argc, char *argv[])
         do
         {
             deltat_vector.push_back(deltat);
-            IncrementalChorinTemam<2> incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, deltat);
-            incrementalChorinTemam.run();
+            UncoupledNavierStokes<2> uncoupledNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, deltat);
+            uncoupledNavierStokes.run();
 
-            double pressure_Linf_error = incrementalChorinTemam.compute_error_pressure(VectorTools::Linfty_norm);
-            double velocity_L2_error = incrementalChorinTemam.compute_error_velocity(VectorTools::L2_norm);
-            double velocity_H1_error = incrementalChorinTemam.compute_error_velocity(VectorTools::H1_norm);
+            double pressure_Linf_error = uncoupledNavierStokes.compute_error_pressure(VectorTools::Linfty_norm);
+            double velocity_L2_error = uncoupledNavierStokes.compute_error_velocity(VectorTools::L2_norm);
+            double velocity_H1_error = uncoupledNavierStokes.compute_error_velocity(VectorTools::H1_norm);
 
             if (mpi_rank == 0)
             {
@@ -169,11 +169,11 @@ int main(int argc, char *argv[])
 
         for (auto meshFile : meshFiles)
         {
-            IncrementalChorinTemam<3> incrementalChorinTemam(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
-            incrementalChorinTemam.run();
+            UncoupledNavierStokes<3> uncoupledNavierStokes(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
+            uncoupledNavierStokes.run();
 
-            double pressure_Linf_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
-            double velocity_H1_error = incrementalChorinTemam.compute_error_velocity(VectorTools::H1_norm);
+            double pressure_Linf_error = uncoupledNavierStokes.compute_error_pressure(VectorTools::L2_norm);
+            double velocity_H1_error = uncoupledNavierStokes.compute_error_velocity(VectorTools::H1_norm);
 
             if (mpi_rank == 0)
             {
@@ -192,11 +192,11 @@ int main(int argc, char *argv[])
 
         for (auto meshFile : meshFiles)
         {
-            IncrementalChorinTemam<2> incrementalChorinTemam(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
-            incrementalChorinTemam.run();
+            UncoupledNavierStokes<2> uncoupledNavierStokes(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
+            uncoupledNavierStokes.run();
 
-            double pressure_Linf_error = incrementalChorinTemam.compute_error_pressure(VectorTools::L2_norm);
-            double velocity_H1_error = incrementalChorinTemam.compute_error_velocity(VectorTools::H1_norm);
+            double pressure_Linf_error = uncoupledNavierStokes.compute_error_pressure(VectorTools::L2_norm);
+            double velocity_H1_error = uncoupledNavierStokes.compute_error_velocity(VectorTools::H1_norm);
 
             if (mpi_rank == 0)
             {
