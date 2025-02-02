@@ -814,12 +814,9 @@ std::string UncoupledNavierStokes<dim>::get_output_directory()
     return sub_dir_path.string();
 }
 
-<<<<<<< HEAD:src/UncoupledNavierStokes.cpp
-template class UncoupledNavierStokes<2>;
-template class UncoupledNavierStokes<3>;
-=======
+
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::pressure_update(const bool rotational)
+void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
 {
     // Non-rotational variant: just p^{n+1} = p^n + deltap
     if (!rotational)
@@ -953,7 +950,5 @@ void IncrementalChorinTemam<dim>::pressure_update(const bool rotational)
     pressure_solution.update_ghost_values();
 }
 
-
-template class IncrementalChorinTemam<2>;
-template class IncrementalChorinTemam<3>;
->>>>>>> refs/remotes/origin/main:src/IncrementalChorinTemam.cpp
+template class UncoupledNavierStokes<2>;
+template class UncoupledNavierStokes<3>;

@@ -95,14 +95,14 @@ int main(int argc, char *argv[])
     }
     case 5:
     {
-        UncoupledNavierStokes<2> UncoupledNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        UncoupledNavierStokes.run();
+        UncoupledNavierStokes<2> uncoupledNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        uncoupledNavierStokes.run();
         break;
     }
     case 6:
     {
-        UncoupledNavierStokes<3> UncoupledNavierStokes(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        UncoupledNavierStokes.run();
+        UncoupledNavierStokes<3> uncoupledNavierStokes(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        uncoupledNavierStokes.run();
         break; 
     }
 
