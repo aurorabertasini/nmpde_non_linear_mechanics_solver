@@ -51,6 +51,7 @@
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
+#include <filesystem>
 
 using namespace dealii;
 
@@ -101,6 +102,8 @@ public:
   virtual void solve();
   virtual void output();
   double compute_error(const VectorTools::NormType &norm_type, bool velocity);
+  virtual std::string get_output_directory();
+
 
 
   // -----------------------------------------------------------
@@ -488,6 +491,7 @@ public:
   void assemble() override;
   void solve() override;
   void output() override;
+  std::string get_output_directory() override;
 
   TrilinosWrappers::MPI::BlockVector get_solution() const
   {
@@ -523,7 +527,7 @@ public:
   void assemble() override;
   void solve() override;
   void output() override;
-  // void output_exact_solution();
+  std::string get_output_directory() override;
 
   /**
    * Provide an initial condition for the iterative scheme.

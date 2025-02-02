@@ -92,6 +92,12 @@ void SteadyNavierStokes<dim>::output()
 {
 }
 
+template <int dim>
+std::string SteadyNavierStokes<dim>::get_output_directory()
+{
+  return "./";  
+}
+
 // ===============================
 // Stokes<dim> methods
 // ===============================
@@ -444,13 +450,44 @@ void Stokes<dim>::output()
   numProcessors += (this->mpi_size == 1) ? "_processor" : "_processors";
 
   const std::string output_file_name = "output-Stokes-" + numProcessors;
-  data_out.write_vtu_with_pvtu_record("../outputStokes/",
+  data_out.write_vtu_with_pvtu_record(this->get_output_directory(),
                                       output_file_name,
                                       0,
                                       MPI_COMM_WORLD);
 
   this->pcout << "Output written to " << output_file_name << std::endl;
   this->pcout << "===============================================" << std::endl;
+}
+
+template <int dim>
+std::string Stokes<dim>::get_output_directory()
+{
+    namespace fs = std::filesystem;
+
+    // 1) Ensure top-level "outputs/" exists
+    if (!fs::exists("outputs"))
+        fs::create_directory("outputs");
+
+    // 2) Create a subdirectory specific to "SteadyNavierStokes"
+    if (!fs::exists("outputs/SteadyNavierStokes"))
+        fs::create_directory("outputs/SteadyNavierStokes");
+
+    // 3) Create a subdirectory specific to "Stokes"
+    if (!fs::exists("outputs/SteadyNavierStokes/Stokes"))
+        fs::create_directory("outputs/SteadyNavierStokes/Stokes");
+
+    // 4) Further subdivide by Reynolds number (or any relevant parameter)
+    const std::string sub_dir_name =
+        "outputs_reynolds_" + std::to_string(static_cast<int>(1.0 / this->nu));
+
+    fs::path sub_dir_path = 
+        fs::path("outputs/SteadyNavierStokes/Stokes") / sub_dir_name;
+
+    if (!fs::exists(sub_dir_path))
+        fs::create_directory(sub_dir_path);
+
+    // Return the absolute string path to the new directory
+    return sub_dir_path.string();
 }
 
 
@@ -527,7 +564,6 @@ void IncrementalStokes<dim>::setup()
     Functions::ZeroFunction<dim> zero_function(dim + 1);
 
     // Dirichlet Boundary Conditions
-      // boundary_functions[0] = &this->exact_solution;         // Inlet
       boundary_functions[1] = &this->exact_solution;         // Outlet
       boundary_functions[2] = &this->exact_solution;         // Walls
       boundary_functions[3] = &this->exact_solution;         // Obstacle
@@ -850,7 +886,7 @@ void IncrementalStokes<dim>::output()
   numProcessors += (this->mpi_size == 1) ? "_processor" : "_processors";
 
   const std::string output_file_name = "output-IncrementalStokes-" + numProcessors;
-  data_out.write_vtu_with_pvtu_record("../outputIncrementalStokes/",
+  data_out.write_vtu_with_pvtu_record(this->get_output_directory(),
                                       output_file_name,
                                       0,
                                       MPI_COMM_WORLD);
@@ -859,6 +895,36 @@ void IncrementalStokes<dim>::output()
   this->pcout << "===============================================" << std::endl;
 }
 
+template <int dim>
+std::string IncrementalStokes<dim>::get_output_directory()
+{
+    namespace fs = std::filesystem;
+
+    // 1) Ensure top-level "outputs/" exists
+    if (!fs::exists("outputs"))
+        fs::create_directory("outputs");
+
+    // 2) Create a subdirectory specific to "SteadyNavierStokes"
+    if (!fs::exists("outputs/SteadyNavierStokes"))
+        fs::create_directory("outputs/SteadyNavierStokes");
+    
+    // 3) Create a subdirectory specific to "IncrementalStokes"
+    if (!fs::exists("outputs/SteadyNavierStokes/IncrementalStokes"))
+        fs::create_directory("outputs/SteadyNavierStokes/IncrementalStokes");
+
+    // 4) Further subdivide by Reynolds number (or any relevant parameter)
+    const std::string sub_dir_name = 
+        "outputs_reynolds_" + std::to_string(static_cast<int>(1.0/this->nu));
+
+    fs::path sub_dir_path = 
+        fs::path("outputs/SteadyNavierStokes/IncrementalStokes") / sub_dir_name;
+
+    if (!fs::exists(sub_dir_path))
+        fs::create_directory(sub_dir_path);
+
+    // Return the absolute string path to the new directory
+    return sub_dir_path.string();
+}
 
 
 

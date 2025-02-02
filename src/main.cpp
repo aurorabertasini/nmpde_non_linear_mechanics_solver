@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
 
     case 4:
     {
-        std::vector<std::string> meshFiles = {"../mesh/squareBenchmark2D_1000.msh", "../mesh/squareBenchmark2D_500.msh", "../mesh/squareBenchmark2D_250.msh", "../mesh/squareBenchmark2D_125.msh"};
+        std::vector<std::string> meshFiles = {"../mesh/squareBenchmark2D_1000.msh", "../mesh/squareBenchmark2D_500.msh", "../mesh/squareBenchmark2D_250.msh" /*, "../mesh/squareBenchmark2D_125.msh" */};
         std::ofstream out_file("space_convergence_analysis_steady_navier_stokes_2D.csv", std::ios::app);
         out_file << "mesh_file_name,velocity_L2_error,velocity_H1_error" << std::endl;
 
