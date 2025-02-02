@@ -81,15 +81,17 @@ int main(int argc, char *argv[])
     }
     case 3:
     {
-        MonolithicNavierStokes monolithicNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, 1, Re);
+        MonolithicNavierStokes<2> monolithicNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
         monolithicNavierStokes.setup();
         monolithicNavierStokes.solve();
         break;
     }
     case 4:
     {
-        std::cout << "Not Available :(" << std::endl;
-        exit(0);
+        MonolithicNavierStokes<3> monolithicNavierStokes(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        monolithicNavierStokes.setup();
+        monolithicNavierStokes.solve();
+        break;
     }
     case 5:
     {
@@ -100,7 +102,6 @@ int main(int argc, char *argv[])
     case 6:
     {
         IncrementalChorinTemam<3> incrementalChorinTemam(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        std::cout << "Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
         incrementalChorinTemam.run();
         break; 
     }

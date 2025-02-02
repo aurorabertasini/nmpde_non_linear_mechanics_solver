@@ -198,6 +198,8 @@ public:
 
     std::string get_output_directory();
 
+    void pressure_update(bool rotational);
+
 private:
     Triangulation<dim> triangulation;
 
@@ -226,6 +228,7 @@ private:
     TrilinosWrappers::MPI::Vector old_velocity;
     TrilinosWrappers::MPI::Vector old_old_velocity;
     TrilinosWrappers::MPI::Vector u_star;
+    TrilinosWrappers::MPI::Vector u_star_divergence;
     TrilinosWrappers::MPI::Vector velocity_solution;
     TrilinosWrappers::MPI::Vector update_velocity_solution;
     TrilinosWrappers::MPI::Vector velocity_system_rhs;
@@ -254,6 +257,8 @@ private:
     ConditionalOStream pcout;
 
     TimerOutput computing_timer;
+
+    bool rotational = false; 
 
     // Mesh file name.
     const std::string mesh_file_name;
@@ -319,6 +324,5 @@ UncoupledNavierStokes<dim>::UncoupledNavierStokes(
                       TimerOutput::summary,
                       TimerOutput::wall_times)
 {
-    std::cout << "Initializing the mesh" << std::endl;
     this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
 }
