@@ -1,6 +1,6 @@
 #include "../include/SteadyNavierStokes.hpp"
 #include "../include/MonolithicNavierStokes.hpp"
-#include "../include/IncrementalChorinTemam.hpp"
+#include "../include/UncoupledNavierStokes.hpp"
 #include "../include/ConfigReader.hpp"
 
 int main(int argc, char *argv[])
@@ -95,14 +95,14 @@ int main(int argc, char *argv[])
     }
     case 5:
     {
-        IncrementalChorinTemam<2> incrementalChorinTemam(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        incrementalChorinTemam.run();
+        UncoupledNavierStokes<2> UncoupledNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        UncoupledNavierStokes.run();
         break;
     }
     case 6:
     {
-        IncrementalChorinTemam<3> incrementalChorinTemam(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        incrementalChorinTemam.run();
+        UncoupledNavierStokes<3> UncoupledNavierStokes(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
+        UncoupledNavierStokes.run();
         break; 
     }
 
