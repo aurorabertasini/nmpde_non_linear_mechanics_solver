@@ -50,7 +50,7 @@
 using namespace dealii;
 
 template <unsigned int dim>
-class IncrementalChorinTemam
+class UncoupledNavierStokes
 {
 public:
     class ForcingTerm : public Function<dim>
@@ -169,7 +169,7 @@ public:
         }
     };
 
-    IncrementalChorinTemam(const std::string &mesh_file_name_,
+    UncoupledNavierStokes(const std::string &mesh_file_name_,
                            const unsigned int &degree_velocity_,
                            const unsigned int &degree_pressure_,
                            const double &T_,
@@ -293,7 +293,7 @@ private:
 };
 
 template <unsigned int dim>
-IncrementalChorinTemam<dim>::IncrementalChorinTemam(
+UncoupledNavierStokes<dim>::UncoupledNavierStokes(
     const std::string &mesh_file_name_,
     const unsigned int &degree_velocity_,
     const unsigned int &degree_pressure_,

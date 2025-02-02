@@ -1,7 +1,7 @@
-#include "../include/IncrementalChorinTemam.hpp"
+#include "../include/UncoupledNavierStokes.hpp"
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::setup()
+void UncoupledNavierStokes<dim>::setup()
 {
     if (mpi_rank == 0)
         std::cout << "Initializing the mesh" << std::endl;
@@ -118,7 +118,7 @@ void IncrementalChorinTemam<dim>::setup()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::assemble_system_velocity()
+void UncoupledNavierStokes<dim>::assemble_system_velocity()
 {
     TimerOutput::Scope t(computing_timer, "assemble_velocity");
 
@@ -216,7 +216,7 @@ void IncrementalChorinTemam<dim>::assemble_system_velocity()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::solve_velocity_system()
+void UncoupledNavierStokes<dim>::solve_velocity_system()
 {
     TimerOutput::Scope t(computing_timer, "solve_velocity");
 
@@ -248,7 +248,7 @@ void IncrementalChorinTemam<dim>::solve_velocity_system()
     velocity_solution.update_ghost_values();
 }
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::assemble_system_pressure()
+void UncoupledNavierStokes<dim>::assemble_system_pressure()
 {
 
     TimerOutput::Scope t(computing_timer, "assemble_pressure");
@@ -327,7 +327,7 @@ void IncrementalChorinTemam<dim>::assemble_system_pressure()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::solve_pressure_system()
+void UncoupledNavierStokes<dim>::solve_pressure_system()
 {
     TimerOutput::Scope t(computing_timer, "solve_pressure");
 
@@ -351,7 +351,7 @@ void IncrementalChorinTemam<dim>::solve_pressure_system()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::update_velocity()
+void UncoupledNavierStokes<dim>::update_velocity()
 {
     TimerOutput::Scope t(computing_timer, "assemble_update");
 
@@ -427,7 +427,7 @@ void IncrementalChorinTemam<dim>::update_velocity()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::solve_update_velocity_system()
+void UncoupledNavierStokes<dim>::solve_update_velocity_system()
 {
 
     TimerOutput::Scope t(computing_timer, "solve_update");
@@ -459,7 +459,7 @@ void IncrementalChorinTemam<dim>::solve_update_velocity_system()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::output_results()
+void UncoupledNavierStokes<dim>::output_results()
 {
     DataOut<dim> data_out;
 
@@ -500,7 +500,7 @@ void IncrementalChorinTemam<dim>::output_results()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::run()
+void UncoupledNavierStokes<dim>::run()
 {
     setup();
 
@@ -557,9 +557,13 @@ void IncrementalChorinTemam<dim>::run()
 
         pressure_solution.add(deltap);
 
-        output_results();
         // compute_lift_drag();
-
+        output_results();
+        // print every 100 time steps 
+        // if (time_step % 100 == 0)
+        // {
+        //     output_results();
+        // }
         // // Clear for next iteration
         // velocity_solution = 0;
         // pressure_solution = 0;
@@ -568,7 +572,7 @@ void IncrementalChorinTemam<dim>::run()
 }
 
 template <unsigned int dim>
-void IncrementalChorinTemam<dim>::compute_lift_drag()
+void UncoupledNavierStokes<dim>::compute_lift_drag()
 {
     // -------------------------------------------------
     // 1) Setup for face integration
@@ -774,7 +778,7 @@ void IncrementalChorinTemam<dim>::compute_lift_drag()
 }
 
 template <unsigned int dim>
-std::string IncrementalChorinTemam<dim>::get_output_directory()
+std::string UncoupledNavierStokes<dim>::get_output_directory()
 {
 
     namespace fs = std::filesystem;
@@ -783,24 +787,24 @@ std::string IncrementalChorinTemam<dim>::get_output_directory()
         fs::create_directory("./outputs");
     if constexpr (dim == 2)
     {
-        if (!fs::exists("./outputs/IncrementalChorinTemam2D"))
+        if (!fs::exists("./outputs/UncoupledNavierStokes2D"))
         {
-            fs::create_directory("./outputs/IncrementalChorinTemam2D");
+            fs::create_directory("./outputs/UncoupledNavierStokes2D");
         }
     }
     else if constexpr (dim == 3)
     {
-        if (!fs::exists("./outputs/IncrementalChorinTemam3D"))
-            fs::create_directory("./outputs/IncrementalChorinTemam3D");
+        if (!fs::exists("./outputs/UncoupledNavierStokes3D"))
+            fs::create_directory("./outputs/UncoupledNavierStokes3D");
     }
 
     fs::path sub_dir_path = "";
 
     std::string sub_dir_name = "outputs_reynolds_" + std::to_string(static_cast<int>(reynolds_number));
     if constexpr (dim == 2)
-        sub_dir_path = "./outputs/IncrementalChorinTemam2D/" + sub_dir_name + "/";
+        sub_dir_path = "./outputs/UncoupledNavierStokes2D/" + sub_dir_name + "/";
     else if constexpr (dim == 3)
-        sub_dir_path = "./outputs/IncrementalChorinTemam3D/" + sub_dir_name + "/";
+        sub_dir_path = "./outputs/UncoupledNavierStokes3D/" + sub_dir_name + "/";
 
     if (!fs::exists(sub_dir_path))
     {
@@ -810,5 +814,5 @@ std::string IncrementalChorinTemam<dim>::get_output_directory()
     return sub_dir_path.string();
 }
 
-template class IncrementalChorinTemam<2>;
-template class IncrementalChorinTemam<3>;
+template class UncoupledNavierStokes<2>;
+template class UncoupledNavierStokes<3>;
