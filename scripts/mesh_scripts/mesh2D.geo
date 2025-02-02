@@ -1,5 +1,5 @@
 // Mesh size parameter
-lc = 0.05; // Adjust this value to refine or coarsen the mesh
+lc = 0.01; // Adjust this value to refine or coarsen the mesh
 Printf("mesh2D: lc = %g", lc);
 
 // Define the outer rectangle points

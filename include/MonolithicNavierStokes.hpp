@@ -5,17 +5,28 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/distributed/fully_distributed_tria.h>
-#include <deal.II/base/quadrature_lib.h>
+
+#include <deal.II/lac/affine_constraints.h>
+#include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/sparse_matrix.h>
+#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
+#include <deal.II/lac/precondition.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_vector.h>
+#include <deal.II/lac/trilinos_block_sparse_matrix.h>
+#include <deal.II/lac/trilinos_parallel_block_vector.h>
 
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_tools.h>
+#include <deal.II/dofs/dof_renumbering.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
-
 #include <deal.II/fe/fe_simplex_p.h>
 #include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/fe_values_extractors.h>
 #include <deal.II/fe/mapping_fe.h>
 
@@ -23,60 +34,6 @@
 #include <deal.II/grid/grid_in.h>
 #include <deal.II/grid/grid_out.h>
 #include <deal.II/grid/tria.h>
-
-#include <deal.II/grid/grid_in.h>
-
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/matrix_tools.h>
-#include <deal.II/numerics/vector_tools.h>
-#include <deal.II/base/quadrature_lib.h>
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/fe/fe_simplex_p.h>
-#include <deal.II/fe/fe_values.h>
-
-#include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/grid_in.h>
-#include <deal.II/grid/grid_out.h>
-#include <deal.II/grid/tria.h>
-
-#include <deal.II/lac/dynamic_sparsity_pattern.h>
-#include <deal.II/lac/precondition.h>
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/sparse_matrix.h>
-#include <deal.II/lac/vector.h>
-
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/matrix_tools.h>
-#include <deal.II/numerics/vector_tools.h>
-
-// ---------------------------------------------------------------------
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_renumbering.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/fe/fe_simplex_p.h>
-#include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_values.h>
-#include <deal.II/fe/fe_values_extractors.h>
-#include <deal.II/fe/mapping_fe.h>
-#include <deal.II/grid/grid_tools.h>
-#include <deal.II/distributed/fully_distributed_tria.h>
-#include <deal.II/grid/grid_in.h>
-
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/trilinos_block_sparse_matrix.h>
-#include <deal.II/lac/trilinos_parallel_block_vector.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
 
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_tools.h>
@@ -93,35 +50,11 @@ using namespace dealii;
 // to write function in space use p[0], p[1], p[2], get_time() for x, y, z, t respectively
 // to write exponential function use pow(base, exp), for example pow(M_E, 2*p[0]) for exp(2x)
 // to write sin function use std::sin, for example std::sin(M_PI*p[0]) for sin(pi*x)
-
+template <unsigned int dim>
 class MonolithicNavierStokes
 {
 public:
-    // Physical dimension (1D, 2D, 3D)
-    static constexpr unsigned int dim = 2;
-
     // 2. Function for the transport coefficient.
-    class Function_t : public Function<dim>
-    {
-    public:
-        virtual void
-        vector_value(const Point<dim> & /*p*/,
-                     Vector<double> &values) const override
-        {
-            values[0] = 0.0;
-            values[1] = 0.0;
-        }
-        virtual double
-        value(const Point<dim> & /*p*/,
-              const unsigned int component = 0) const override
-        {
-            if (component == 0)
-                return 0.0;
-            else // if (component == 1)
-                return 0.0;
-        }
-    };
-
     class ForcingTerm : public Function<dim>
     {
     public:
@@ -147,17 +80,23 @@ public:
     {
     public:
         InletVelocity(const double H)
-            : Function<dim>(dim + 1)
+            : Function<dim>(dim)
         {
             this->H = H;
+            if constexpr (dim == 2)
+                this->uM = 1.5;
+            else
+                this->uM = 2.25;
         }
 
         virtual void
         vector_value(const Point<dim> &p, Vector<double> &values) const override
         {
-            values[0] = 4.0 * uM * p[1] * (H - p[1]) / (H * H);
-
-            for (unsigned int i = 1; i < dim + 1; ++i)
+            if constexpr (dim == 2)
+                values[0] = 4.0 * uM * p[1] * (H - p[1]) / (H * H);
+            else
+                values[0] = 16.0 * uM * p[1] * (H - p[1]) * p[2] * (H - p[2]) / (H * H * H * H);
+            for (unsigned int i = 1; i < dim; ++i)
                 values[i] = 0.0;
         }
 
@@ -165,7 +104,10 @@ public:
         value(const Point<dim> &p, const unsigned int component = 0) const override
         {
             if (component == 0)
-                return 4.0 * uM * p[1] * (H - p[1]) / (H * H);
+                if constexpr (dim == 2)
+                    return 4.0 * uM * p[1] * (H - p[1]) / (H * H);
+                else
+                    return 16.0 * uM * p[1] * (H - p[1]) * p[2] * (H - p[2]) / (H * H * H * H);
             else
                 return 0.0;
         }
@@ -176,39 +118,10 @@ public:
         }
 
     protected:
-        const double uM = 1.5;
+        double uM;
         double H;
     };
 
-    // function for hom dirichelet condition
-    class Function_Dirichelet_hom : public Function<dim>
-    {
-    public:
-        Function_Dirichelet_hom()
-            : Function<dim>(dim + 1)
-        {
-        }
-
-        virtual void
-        vector_value(const Point<dim> &p, Vector<double> &values) const override
-        {
-            values[0] = 0.0;
-
-            for (unsigned int i = 1; i < dim + 1; ++i)
-                values[i] = 0.0;
-        }
-
-        virtual double
-        value(const Point<dim> &p, const unsigned int component = 0) const override
-        {
-            if (component == 0)
-                return 0.0;
-            else
-                return 0.0;
-        }
-    };
-
-    // function for Neumann condition
     class Function_Neumann : public Function<dim>
     {
     public:
@@ -268,6 +181,7 @@ public:
 
 
 // Abstract class for block preconditioners
+
 class BlockPrecondition
 {
 public:
@@ -281,6 +195,7 @@ public:
  * Each diagonal block (velocity, pressure) uses an inner preconditioner
  * that can be ILU or AMG. We provide two “initialize” methods.
  */
+
 class PreconditionBlockDiagonal : public BlockPrecondition
 {
 public:
@@ -731,18 +646,6 @@ class PreconditionYoshida : public BlockPrecondition {
 /*****************************************************************/
 /*****************************************************************/
 
-
-
-
-
-
-
-
-
-
-
-
-    // Constructor. We provide the final time, time step Delta t and theta method
     // parameter as constructor arguments.
     MonolithicNavierStokes(
         const std::string &mesh_file_name_,
@@ -750,26 +653,7 @@ class PreconditionYoshida : public BlockPrecondition {
         const unsigned int &degree_pressure_,
         const double &T_,
         const double &deltat_,
-        const double &theta_,
-        const double &re_)
-        : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
-        , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
-        , pcout(std::cout, mpi_rank == 0)
-        , mesh_file_name(mesh_file_name_)
-        , degree_velocity(degree_velocity_)
-        , degree_pressure(degree_pressure_)
-        , T(T_)
-        , deltat(deltat_)
-        , theta(theta_)
-        , inlet_velocity(H)
-        , velocity(0)
-        , pressure(dim)
-        , mesh(MPI_COMM_WORLD)
-        , reynolds_number(re_)
-    {
-        this->nu = (2./3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
-    }
-
+        const double &re_);
     // Initialization.
     void
     setup();
@@ -886,9 +770,6 @@ protected:
     // Time step.
     const double deltat;
 
-    // Theta parameter of the theta method.
-    const double theta;
-
     // Mesh.
     parallel::fullydistributed::Triangulation<dim> mesh;
 
@@ -935,10 +816,6 @@ protected:
     TrilinosWrappers::BlockSparseMatrix pressure_mass;  //!
 
 
-    // // Matrix on the left-hand side (M / deltat + theta A).
-    // TrilinosWrappers::BlockSparseMatrix lhs_matrix;
-
-    // Matrix on the right-hand side (M / deltat - (1 - theta) A).
     TrilinosWrappers::BlockSparseMatrix rhs_matrix;
 
     // Right-hand side vector in the linear system.
@@ -957,5 +834,30 @@ protected:
     std::vector<double> vec_drag_coeff;
     std::vector<double> vec_lift_coeff;
 };
+
+template <unsigned int dim>
+MonolithicNavierStokes<dim>::MonolithicNavierStokes(
+        const std::string &mesh_file_name_,
+        const unsigned int &degree_velocity_,
+        const unsigned int &degree_pressure_,
+        const double &T_,
+        const double &deltat_,
+        const double &re_)
+        : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+        , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
+        , pcout(std::cout, mpi_rank == 0)
+        , mesh_file_name(mesh_file_name_)
+        , degree_velocity(degree_velocity_)
+        , degree_pressure(degree_pressure_)
+        , T(T_)
+        , deltat(deltat_)
+        , inlet_velocity(H)
+        , velocity(0)
+        , pressure(dim)
+        , mesh(MPI_COMM_WORLD)
+        , reynolds_number(re_)
+    {
+        this->nu = (2./3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
+    }
 
 #endif

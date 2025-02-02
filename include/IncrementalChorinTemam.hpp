@@ -258,7 +258,7 @@ private:
 
     TimerOutput computing_timer;
 
-    bool rotational = true; 
+    bool rotational = false; 
 
     // Mesh file name.
     const std::string mesh_file_name;
@@ -324,6 +324,5 @@ IncrementalChorinTemam<dim>::IncrementalChorinTemam(
                       TimerOutput::summary,
                       TimerOutput::wall_times)
 {
-    std::cout << "Initializing the mesh" << std::endl;
     this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
 }
