@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
 
         std::cout << "Please choose the problem to solve:" << std::endl;
         std::cout << "(1) Time Convergence test ChorinTemam (2D)" << std::endl;
-        std::cout << "(2) Space Convergence test ChorinTemam (3D)" << std::endl;
-        std::cout << "(3) Space Convergence test ChorinTemam (2D)" << std::endl;
+        std::cout << "(2) Time Convergence test Monolithic (3D)" << std::endl;
+        std::cout << "(3) Space Convergence test Monolithic (3D)" << std::endl;
         std::cout << "(4) Space Convergence test SteadyNavierStokes (2D)" << std::endl;
         std::cout << std::endl;
         std::cout << "Enter your choice: ";
@@ -204,7 +204,7 @@ int main(int argc, char *argv[])
     case 3:
     {
         std::vector<std::string> meshFiles = {"../mesh/cube3D_1.msh", "../mesh/cube3D_2.msh", "../mesh/cube3D_3.msh", "../mesh/cube3D_4.msh"};
-        std::ofstream out_file("space_convergence_analysis_chorin_temam_3D.csv", std::ios::app);
+        std::ofstream out_file("space_convergence_analysis_monolithic_3D.csv", std::ios::app);
         out_file << "mesh_file_name,pressure_Linf_error,velocity_H1_error" << std::endl;
 
         double number_of_time_steps = 400.0;
@@ -225,29 +225,6 @@ int main(int argc, char *argv[])
         }
         break;
     }
-    case 3:
-    {
-        std::vector<std::string> meshFiles = {"../mesh/squareBenchmark2D_1000.msh", "../mesh/squareBenchmark2D_500.msh", "../mesh/squareBenchmark2D_250.msh", "../mesh/squareBenchmark2D_125.msh"};
-        std::ofstream out_file("space_convergence_analysis_chorin_temam_2D.csv", std::ios::app);
-        out_file << "mesh_file_name,pressure_Linf_error,velocity_H1_error" << std::endl;
-        double number_of_time_steps = 4.0;
-        double deltat = 1e-10;
-
-        for (auto meshFile : meshFiles)
-        {
-            UncoupledNavierStokes<2> uncoupledNavierStokes(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
-            uncoupledNavierStokes.run();
-
-            double pressure_Linf_error = uncoupledNavierStokes.compute_error_pressure(VectorTools::L2_norm);
-            double velocity_H1_error = uncoupledNavierStokes.compute_error_velocity(VectorTools::H1_norm);
-
-            if (mpi_rank == 0)
-            {
-                out_file << meshFile << "," << pressure_Linf_error << "," << velocity_H1_error << std::endl;
-            }
-        }
-    }
-
     case 4:
     {
         std::vector<std::string> meshFiles = {"../mesh/squareBenchmark2D_1000.msh", "../mesh/squareBenchmark2D_500.msh", "../mesh/squareBenchmark2D_250.msh" /*, "../mesh/squareBenchmark2D_125.msh" */};
