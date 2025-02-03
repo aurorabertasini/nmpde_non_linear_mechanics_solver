@@ -659,6 +659,8 @@ void UncoupledNavierStokes<dim>::run()
         // }
 
         output_results();
+
+        compute_errors();
     }
 }
 
@@ -968,6 +970,66 @@ void UncoupledNavierStokes<dim>::pressure_update(bool rotational)
     pressure_solution.update_ghost_values();
 }
 
+template <unsigned int dim>
+void UncoupledNavierStokes<dim>::compute_errors()
+{
+    if (time == T)
+    {
+        Linfinity_error_pressure = compute_error_pressure(VectorTools::Linfty_norm);
+
+        L2_error_velocity = compute_error_velocity(VectorTools::L2_norm);
+
+        H1_error_velocity = compute_error_velocity(VectorTools::H1_norm);
+    }
+
+    double new_velocity_norm = compute_error_velocity(VectorTools::L2_norm);
+    if (new_velocity_norm > linfinity_L2_error_velocity)
+        linfinity_L2_error_velocity = new_velocity_norm;
+    
+    double new_pressure_norm = compute_error_pressure(VectorTools::L2_norm);
+    if (new_pressure_norm > linfinity_L2_error_pressure)
+        linfinity_L2_error_pressure = new_pressure_norm;
+    
+    double new_H1_norm = compute_error_velocity(VectorTools::H1_norm);
+    if (new_H1_norm > linfinity_H1_error_velocity)
+        linfinity_H1_error_velocity = new_H1_norm;
+}
+
+template <unsigned int dim>
+double UncoupledNavierStokes<dim>::get_L2_error_velocity()
+{
+    return L2_error_velocity;
+}
+
+template <unsigned int dim>
+double UncoupledNavierStokes<dim>::get_H1_error_velocity()
+{
+    return H1_error_velocity;
+}
+
+template <unsigned int dim>
+double UncoupledNavierStokes<dim>::get_Linfinity_error_pressure()
+{
+    return Linfinity_error_pressure;
+}
+
+template <unsigned int dim>
+double UncoupledNavierStokes<dim>::get_linfinity_L2_error_velocity()
+{
+    return linfinity_L2_error_velocity;
+}
+
+template <unsigned int dim>
+double UncoupledNavierStokes<dim>::get_linfinity_H1_error_velocity()
+{
+    return linfinity_H1_error_velocity;
+}
+
+template <unsigned int dim>
+double UncoupledNavierStokes<dim>::get_linfinity_L2_error_pressure()
+{
+    return linfinity_L2_error_pressure;
+}
 
 template class UncoupledNavierStokes<2>;
 template class UncoupledNavierStokes<3>;

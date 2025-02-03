@@ -983,6 +983,8 @@ public:
     std::string
     get_output_directory();
 
+    double get_l2_H1_error();
+
 protected:
     // Assemble the matrix without the non-linear term.
     void
@@ -1043,8 +1045,7 @@ protected:
 
     double drag;
 
-    const double rho = 1.0;
-
+    double l2_H1_error = 0.0;
     // Discretization. ///////////////////////////////////////////////////////////
 
     // Mesh file name.

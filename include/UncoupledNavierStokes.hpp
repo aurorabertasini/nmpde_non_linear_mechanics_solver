@@ -481,11 +481,20 @@ public:
 
     void run();
 
-    double compute_error_velocity(const VectorTools::NormType &norm_type);
+    double get_linfinity_H1_error_velocity();
 
-    double compute_error_pressure(const VectorTools::NormType &norm_type);
+    double get_linfinity_L2_error_velocity();
+
+    double get_linfinity_L2_error_pressure();
+
+    double get_Linfinity_error_pressure();
+
+    double get_L2_error_velocity();
+
+    double get_H1_error_velocity();
 
 private:
+
     void setup();
 
     void assemble_system_velocity();
@@ -507,6 +516,12 @@ private:
     std::string get_output_directory();
 
     void pressure_update(bool rotational);
+
+    double compute_error_velocity(const VectorTools::NormType &norm_type);
+
+    double compute_error_pressure(const VectorTools::NormType &norm_type);
+
+    void compute_errors();
 
     Triangulation<dim> triangulation;
 
@@ -553,6 +568,8 @@ private:
 
     // Viscosity
     double nu = 1.;
+
+    double l2_H1_norm = 0.0; 
 
     unsigned int time_step = 0;
 
@@ -607,6 +624,20 @@ private:
     double drag;
 
     const double rho = 1.0;
+
+    // errors 
+
+    double linfinity_H1_error_velocity = 0.0;
+
+    double linfinity_L2_error_velocity = 0.0;
+
+    double linfinity_L2_error_pressure = 0.0;
+
+    double Linfinity_error_pressure = 0.0;
+
+    double L2_error_velocity = 0.0;
+
+    double H1_error_velocity = 0.0;
 };
 
 template <unsigned int dim>

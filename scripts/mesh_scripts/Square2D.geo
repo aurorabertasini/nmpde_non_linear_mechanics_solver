@@ -1,5 +1,5 @@
 // Define characteristic length
-h = 0.1;  // Modify this value as needed
+h = 0.0125;  // Modify this value as needed
 
 // Define corner points
 Point(1) = {0, 0, 0, h};

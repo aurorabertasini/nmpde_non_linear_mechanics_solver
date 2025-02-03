@@ -484,9 +484,8 @@ void MonolithicNavierStokes<dim>::solve()
     {
         pcout << "Applying the initial condition" << std::endl;
 
-        // if i know the exact solution:
         exact_solution3D.set_time(time);
-        VectorTools::interpolate(dof_handler, exact_solution3D.exact_velocity, solution_owned);
+        VectorTools::interpolate(dof_handler, exact_solution3D, solution_owned, ComponentMask({true, true, true, false}));
         solution = solution_owned;
 
         pcout << "-----------------------------------------------" << std::endl;
@@ -507,6 +506,8 @@ void MonolithicNavierStokes<dim>::solve()
         assemble_base_matrix();
         assemble_rhs(time);
         solve_time_step();
+
+        l2_H1_error += compute_error(VectorTools::H1_norm, true) * compute_error(VectorTools::H1_norm, true);
 
         output(time_step);
     }
@@ -642,6 +643,13 @@ double MonolithicNavierStokes<dim>::compute_error(const VectorTools::NormType &n
 
     return error;
 }
+
+template <unsigned int dim>
+double MonolithicNavierStokes<dim>::get_l2_H1_error()
+{
+    return sqrt(deltat * l2_H1_error);
+}
+
 
 template class MonolithicNavierStokes<2>;
 template class MonolithicNavierStokes<3>;
