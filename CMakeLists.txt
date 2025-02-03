@@ -3,5 +3,5 @@ project(project_title LANGUAGES CXX C)
 
 include(./common/cmake-common.cmake)
 
-add_executable(main src/main.cpp src/UncoupledNavierStokes.cpp src/MonolithicNavierStokes.cpp)
+add_executable(main src/main.cpp src/UncoupledNavierStokes.cpp src/MonolithicNavierStokes.cpp src/SteadyNavierStokes.cpp)
 deal_ii_setup_target(main)
