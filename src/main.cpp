@@ -7,11 +7,11 @@
 #include <cmath>
 #include <iomanip>
 
-void writeErrorsToFile(const std::string& filename,
-                        const std::vector<double>& deltat_vector,
-                        const std::vector<double>& errors_Linf_pressure,
-                        const std::vector<double>& errors_L2_velocity,
-                        const std::vector<double>& errors_H1_velocity)
+void writeErrorsToFile(const std::string &filename,
+                       const std::vector<double> &deltat_vector,
+                       const std::vector<double> &errors_Linf_pressure,
+                       const std::vector<double> &errors_L2_velocity,
+                       const std::vector<double> &errors_H1_velocity)
 {
     std::ofstream outFile(filename);
     if (!outFile)
@@ -70,7 +70,6 @@ void writeErrorsToFile(const std::string& filename,
     outFile.close();
 }
 
-
 int main(int argc, char *argv[])
 {
     Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
@@ -95,15 +94,15 @@ int main(int argc, char *argv[])
 
         std::cout << "Please choose the problem to solve:" << std::endl;
         std::cout << "(1) Time Convergence test ChorinTemam (2D)" << std::endl;
-        std::cout << "(2) Space Convergence test ChorinTemam (3D)" << std::endl;
-        std::cout << "(3) Space Convergence test ChorinTemam (2D)" << std::endl;
+        std::cout << "(2) Time Convergence test Monolithic (3D)" << std::endl;
+        std::cout << "(3) Space Convergence test Monolithic (3D)" << std::endl;
         std::cout << std::endl;
         std::cout << "Enter your choice: ";
 
-        while (choice < 1 || choice > 3)
+        while (choice < 1 || choice > 4)
         {
             std::cin >> choice;
-            if (choice < 1 || choice > 3)
+            if (choice < 1 || choice > 4)
             {
                 std::cout << "Invalid choice. Please enter a valid choice: ";
             }
@@ -160,7 +159,49 @@ int main(int argc, char *argv[])
     }
     case 2:
     {
-        std::vector<std::string> meshFiles = {"../mesh/cubeBenchmark3D_1.msh", "../mesh/cubeBenchmark3D_2.msh", "../mesh/cubeBenchmark3D_3.msh", "../mesh/cubeBenchmark3D_4.msh"};
+        std::ofstream out_file("time_convergence_analysis_monolithic.csv", std::ios::app);
+        if (mpi_rank == 0)
+            out_file << "delta_t,pressure_Linf_error,velocity_L2_error,velocity_H1_error" << std::endl;
+
+        std::vector<double> errors_Linf_pressure;
+        std::vector<double> errors_H1_velocity;
+        std::vector<double> errors_L2_velocity;
+        std::vector<double> deltat_vector;
+
+        double deltat_start = 0.1;
+        double deltat = deltat_start;
+        int number_of_delta_t_refinements = 5;
+        int count = 0;
+        do
+        {
+            deltat_vector.push_back(deltat);
+            MonolithicNavierStokes<3> monolithicNavierStokes(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, deltat);
+            monolithicNavierStokes.setup();
+            monolithicNavierStokes.solve();
+
+            double pressure_Linf_error = monolithicNavierStokes.compute_error(VectorTools::L2_norm, false);
+            double velocity_L2_error = monolithicNavierStokes.compute_error(VectorTools::L2_norm, true);
+            double velocity_H1_error = monolithicNavierStokes.compute_error(VectorTools::H1_norm, true);
+
+            if (mpi_rank == 0)
+            {
+                out_file << deltat << "," << pressure_Linf_error << "," << velocity_L2_error << "," << velocity_H1_error << std::endl;
+
+                errors_Linf_pressure.push_back(pressure_Linf_error);
+                errors_L2_velocity.push_back(velocity_L2_error);
+                errors_H1_velocity.push_back(velocity_H1_error);
+            }
+
+            deltat /= 2.0;
+            count++;
+        } while (count < number_of_delta_t_refinements);
+        if (mpi_rank == 0)
+            writeErrorsToFile("time_convergence_analysis_monolithic_" + std::to_string(simulationPeriod) + ".txt", deltat_vector, errors_Linf_pressure, errors_L2_velocity, errors_H1_velocity);
+        break;
+    }
+    case 3:
+    {
+        std::vector<std::string> meshFiles = {"../mesh/cube3D_1.msh", "../mesh/cube3D_2.msh", "../mesh/cube3D_3.msh", "../mesh/cube3D_4.msh"};
         std::ofstream out_file("space_convergence_analysis_chorin_temam_3D.csv", std::ios::app);
         out_file << "mesh_file_name,pressure_Linf_error,velocity_H1_error" << std::endl;
 
@@ -181,28 +222,6 @@ int main(int argc, char *argv[])
             }
         }
         break;
-    }
-    case 3:
-    {
-        std::vector<std::string> meshFiles = {"../mesh/squareBenchmark2D_1000.msh", "../mesh/squareBenchmark2D_500.msh", "../mesh/squareBenchmark2D_250.msh", "../mesh/squareBenchmark2D_125.msh"};
-        std::ofstream out_file("space_convergence_analysis_chorin_temam_2D.csv", std::ios::app);
-        out_file << "mesh_file_name,pressure_Linf_error,velocity_H1_error" << std::endl;
-        double number_of_time_steps = 4.0;
-        double deltat = 1e-10;
-
-        for (auto meshFile : meshFiles)
-        {
-            UncoupledNavierStokes<2> uncoupledNavierStokes(meshFile, degreeVelocity, degreePressure, deltat * number_of_time_steps, deltat);
-            uncoupledNavierStokes.run();
-
-            double pressure_Linf_error = uncoupledNavierStokes.compute_error_pressure(VectorTools::L2_norm);
-            double velocity_H1_error = uncoupledNavierStokes.compute_error_velocity(VectorTools::H1_norm);
-
-            if (mpi_rank == 0)
-            {
-                out_file << meshFile << "," << pressure_Linf_error << "," << velocity_H1_error << std::endl;
-            }
-        }
     }
     }
 }
