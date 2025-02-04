@@ -1,5 +1,5 @@
 // Mesh size parameter
-lc = 0.007; // Adjust this value to refine or coarsen the mesh
+lc = 0.001; // Adjust this value to refine or coarsen the mesh
 jPrintf("mesh2D: lc = %g", lc);
 
 // Define the outer rectangle points
