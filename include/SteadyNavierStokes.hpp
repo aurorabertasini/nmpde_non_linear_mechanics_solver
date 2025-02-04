@@ -63,7 +63,7 @@ using namespace dealii;
  *  - Mesh & polynomial degrees
  *  - Constants Re, H, D, uMax, uMean, p_out, nu
  *  - One method run_full_problem_pipeline() that instantiates
- *    and runs Stokes -> IncrementalStokes in a single workflow.
+ *    and runs Stokes -> NonLinearCorrection in a single workflow.
  */
 template <int dim>
 class SteadyNavierStokes
@@ -102,7 +102,7 @@ public:
 
   /**
    * A single method that instantiates a Stokes solver,
-   * runs it, then instantiates an IncrementalStokes solver,
+   * runs it, then instantiates a NonLinearCorrection solver,
    * sets initial conditions, runs it, and finally
    * calls compute_lift_drag().
    */
@@ -431,10 +431,10 @@ public:
 };
 
 // ----------------------------------------------------------------------------
-// Derived class: IncrementalStokes<dim>
+// Derived class: NonLinearCorrection<dim>
 // ----------------------------------------------------------------------------
 template <int dim>
-class IncrementalStokes : public SteadyNavierStokes<dim>
+class NonLinearCorrection : public SteadyNavierStokes<dim>
 {
 public:
   /**
@@ -442,7 +442,7 @@ public:
    * We call the SteadyNavierStokes base constructor with
    * the public getters from stokes_obj, then copy its mesh.
    */
-  IncrementalStokes(const Stokes<dim> &stokes_obj)
+  NonLinearCorrection(const Stokes<dim> &stokes_obj)
     : SteadyNavierStokes<dim>(stokes_obj.get_mesh_file_name(),
                               stokes_obj.get_degree_velocity(),
                               stokes_obj.get_degree_pressure(),
