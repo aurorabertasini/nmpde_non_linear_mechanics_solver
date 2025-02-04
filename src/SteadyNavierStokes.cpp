@@ -26,7 +26,7 @@ void SteadyNavierStokes<dim>::run_full_problem_pipeline()
   // 3) Retrieve the final solution of the Stokes problem
   TrilinosWrappers::MPI::BlockVector stokes_solution = stokes_problem.get_solution();
 
-  // 4) Create an NonLinearCorrection solver from the Stokes problem
+  // 4) Create a NonLinearCorrection solver from the Stokes problem
   NonLinearCorrection<dim> non_linear_correction(stokes_problem);
 
   // 5) Set the initial condition of the incremental solver to the Stokes solution
