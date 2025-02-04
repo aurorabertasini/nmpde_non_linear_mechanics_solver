@@ -839,8 +839,8 @@ public:
         double tol;
     };
 
-    // Yoshida preconditioner.
-    class PreconditionYoshida : public BlockPrecondition
+    // Yosida preconditioner.
+    class PreconditionYosida : public BlockPrecondition
     {
     public:
         void initialize_inner_preconditioner(

@@ -661,6 +661,7 @@ void IncrementalStokes<dim>::assemble()
   // Temporary arrays for old solution evaluations
   std::vector<Tensor<1, dim>> previous_velocity_values(n_q);
   std::vector<Tensor<2, dim>> previous_velocity_gradients(n_q);
+  std::vector<double>         previous_velocity_divergence(n_q);
   std::vector<double>         previous_pressure_values(n_q);
 
   // Predefine shape function evaluations
@@ -685,6 +686,7 @@ void IncrementalStokes<dim>::assemble()
     fe_values[u_k].get_function_values(this->solution_old, previous_velocity_values);
     fe_values[u_k].get_function_gradients(this->solution_old, previous_velocity_gradients);
     fe_values[p_k].get_function_values(this->solution_old, previous_pressure_values);
+    fe_values[u_k].get_function_divergences(this->solution_old, previous_velocity_divergence);
 
     for (unsigned int q = 0; q < n_q; ++q)
     {      
@@ -717,6 +719,11 @@ void IncrementalStokes<dim>::assemble()
 
           local_matrix(i, j) += (previous_velocity_values[q] *
                                 transpose(grad_phi_u[j])) *
+                                phi_u[i] *
+                                fe_values.JxW(q);
+
+          local_matrix(i, j) += 0.5 * previous_velocity_divergence[q] *  // Skew Symmetric Term
+                                phi_u[j] *
                                 phi_u[i] *
                                 fe_values.JxW(q);
 

@@ -434,17 +434,17 @@ protected:
   {
     // Calculate the Neumann function.
     // This result was obtained by setting the normal vector to -i.
-    if (component == 0) {
-      Tensor<1, dim> velocity_gradient =
-          exact_solution.exact_velocity.gradient(p, component);
-      return -nu * velocity_gradient[0];  // Use x-component
-    } else if (component == 1) {
+      if (component == 0) {
       Tensor<1, dim> velocity_gradient =
           exact_solution.exact_velocity.gradient(p, component);
       return -nu * velocity_gradient[0] + exact_solution.exact_pressure.value(p);
+    } else if (component == 1) {
+      Tensor<1, dim> velocity_gradient =
+          exact_solution.exact_velocity.gradient(p, component);
+      return -nu * velocity_gradient[0];
     } else {
       return 0.0;
-    }
+    } 
   }
 
     virtual void vector_value(const Point<dim> &p,
