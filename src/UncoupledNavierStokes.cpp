@@ -557,7 +557,7 @@ void UncoupledNavierStokes<dim>::run()
 
         pressure_update(rotational);
 
-        // compute_lift_drag();
+        compute_lift_drag();
         output_results();
         // print every 100 time steps 
         // if (time_step % 100 == 0)
@@ -577,11 +577,10 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
     // -------------------------------------------------
     // 1) Setup for face integration
     // -------------------------------------------------
-    // Face quadrature for integration over the boundary
     const unsigned int face_quad_degree = 3;
     QGaussSimplex<dim - 1> face_quadrature_formula(face_quad_degree);
 
-    // We will need separate FEFaceValues objects for velocity and pressure:
+    // FEFaceValues for velocity & pressure
     FEFaceValues<dim> fe_face_values_velocity(
         fe_velocity,
         face_quadrature_formula,
@@ -591,97 +590,93 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
         fe_pressure,
         face_quadrature_formula,
         update_values | update_JxW_values);
-    // ^ For pressure, we only need values (not gradients) if we do -p*I
 
     const unsigned int n_face_q_points = face_quadrature_formula.size();
 
-    // We'll store velocity gradients and pressure values at the quadrature points
+    // We'll store velocity gradients and pressure values at quadrature points
     std::vector<Tensor<2, dim>> velocity_gradients(n_face_q_points);
-    std::vector<double> pressure_values(n_face_q_points);
+    std::vector<double>         pressure_values(n_face_q_points);
 
-    // Local partial sums of drag and lift on this MPI rank
     double local_drag = 0.0;
     double local_lift = 0.0;
+
+    
+    // Mean inflow velocity
+    double u_max = inlet_velocity.get_u_max();
+    double u_mean = 2.0 * u_max / 3.0;
+
+    // Cylinder diameter
+    double D = 0.1;
+
+    // This factor  = 2/(ρ U^2 D)  for computing c_D and c_L
+    double coefficient = 2.0 / (rho * u_mean * u_mean * D);
 
     // -------------------------------------------------
     // 2) Loop over cells and faces to integrate traction
     // -------------------------------------------------
-    // We assume mesh, dof_handler_velocity, and dof_handler_pressure
-    // have the same Triangulation. So you can iterate them in parallel.
     auto cell_v = dof_handler_velocity.begin_active();
     auto cell_p = dof_handler_pressure.begin_active();
     const auto end_v = dof_handler_velocity.end();
 
     for (; cell_v != end_v; ++cell_v, ++cell_p)
     {
+        // Only integrate on locally owned cells
         if (!cell_v->is_locally_owned())
             continue;
 
-        // Loop over faces:
+        // Loop over faces
         for (unsigned int f = 0; f < GeometryInfo<dim>::faces_per_cell; ++f)
         {
-            // Check if this face is on the boundary of interest
-            if (cell_v->face(f)->at_boundary() && (cell_v->face(f)->boundary_id() == 4))
+            // Check boundary condition ID
+            if (cell_v->face(f)->at_boundary() && (cell_v->face(f)->boundary_id() == 3))
             {
                 // Reinit face-values for velocity and pressure
                 fe_face_values_velocity.reinit(cell_v, f);
                 fe_face_values_pressure.reinit(cell_p, f);
 
-                // Extract velocity gradients at these face quadrature points
+                // Extract velocity gradients
                 fe_face_values_velocity[FEValuesExtractors::Vector(0)]
                     .get_function_gradients(velocity_solution, velocity_gradients);
 
-                // Extract pressure values at these face quadrature points
-                // (fe_pressure is scalar => use FEValuesExtractors::Scalar(0))
+                // Extract pressure values
                 fe_face_values_pressure[FEValuesExtractors::Scalar(0)]
                     .get_function_values(pressure_solution, pressure_values);
 
-                // Now compute traction contributions
                 for (unsigned int q = 0; q < n_face_q_points; ++q)
                 {
                     const double p = pressure_values[q];
                     const Tensor<2, dim> grad_u = velocity_gradients[q];
                     const Tensor<1, dim> normal_vec = fe_face_values_velocity.normal_vector(q);
-                    const double JxW = fe_face_values_velocity.JxW(q);
+                    const double         JxW = fe_face_values_velocity.JxW(q);
 
-                    // If you want the symmetric gradient:
-                    //   sym_grad_u = 0.5 * (grad_u + transpose(grad_u))
-                    //   Here just do 2*nu*sym_grad_u = nu*(grad_u + grad_u^T)
-                    //   so that fluid_stress = -p*I + 2*nu e(u).
-                    // Or if you are consistent with your code in assemble, you might
-                    // just do fluid_stress = -p I + nu*grad_u, etc.
-
-                    Tensor<2, dim> sym_grad_u;
-                    for (unsigned int d_i = 0; d_i < dim; ++d_i)
-                        for (unsigned int d_j = 0; d_j < dim; ++d_j)
-                            sym_grad_u[d_i][d_j] = 0.5 * (grad_u[d_i][d_j] + grad_u[d_j][d_i]);
-
-                    // Construct the stress tensor = -p I + 2 nu e(u)
+                    // Build fluid_stress = -p I + 2 nu e(u)
+                    // (if nu is kinematic viscosity, multiply by rho if you want μ=ρν)
                     Tensor<2, dim> fluid_stress;
+                    // First, set diagonal entries to -p
                     for (unsigned int d = 0; d < dim; ++d)
-                        fluid_stress[d][d] = -p; // diagonal entries for -p*I
+                        fluid_stress[d][d] = -p;
 
-                    // Add 2 nu e(u)
-                    for (unsigned int d_i = 0; d_i < dim; ++d_i)
-                        for (unsigned int d_j = 0; d_j < dim; ++d_j)
-                            fluid_stress[d_i][d_j] += 2.0 * nu * sym_grad_u[d_i][d_j];
+                    // Add the viscous part = 2 nu sym_grad_u
+                    for (unsigned int i = 0; i < dim; ++i)
+                        for (unsigned int j = 0; j < dim; ++j)
+                            fluid_stress[i][j] += nu * (grad_u[i][j] + grad_u[j][i]);
 
-                    // Traction = fluid_stress * normal
+                    // Traction = stress * normal
                     const Tensor<1, dim> traction = fluid_stress * normal_vec;
 
-                    // Multiply by area element JxW
+                    // Multiply by area element
                     const Tensor<1, dim> force_contribution = traction * JxW;
 
-                    // The x-component is "drag", the y-component is "lift" (2D assumption)
-                    local_drag += force_contribution[0];
-                    local_lift += force_contribution[1];
-                } // end q-point loop
-            }
-        } // end face loop
-    } // end cell loop
+                    // x-component => drag, y-component => lift
+                    local_drag += -coefficient * force_contribution[0];
+                    local_lift += coefficient * force_contribution[1];
+                } // q loop
+            }     // boundary check
+        }         // face loop
+    }             // cell loop
 
     // -------------------------------------------------
-    // 3) Use MPI to sum up partial forces to root = rank 0
+    // 3) MPI: sum up partial forces to rank 0
     // -------------------------------------------------
     double global_drag = 0.0, global_lift = 0.0;
     MPI_Allreduce(&local_drag, &global_drag, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -690,83 +685,57 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
     // -------------------------------------------------
     // 4) Compute pressure difference between points p1 & p2
     // -------------------------------------------------
-    // We only need the pressure dof_handler & solution here.
-    // For each point, we'll see if it is "available" locally; if so,
-    // we do point_value and send it to rank 0.  One simple approach:
     Point<dim> p1, p2;
-    p1[0] = 0.15;
-    p1[1] = 0.20;
-    p2[0] = 0.25;
-    p2[1] = 0.20;
+    p1[0] = 0.15;  p1[1] = 0.20;
+    p2[0] = 0.25;  p2[1] = 0.20;
 
-    // Because pressure is scalar, we can store it in a double
     double local_p1 = 0.0, local_p2 = 0.0;
-    bool have_p1 = false, have_p2 = false;
+    bool   have_p1  = false, have_p2  = false;
 
     try
     {
         local_p1 = VectorTools::point_value(dof_handler_pressure, pressure_solution, p1);
-        have_p1 = true;
+        have_p1  = true;
     }
-    catch (...)
-    {
-        // This rank does not have p1
-    }
+    catch (...) {}
     try
     {
         local_p2 = VectorTools::point_value(dof_handler_pressure, pressure_solution, p2);
-        have_p2 = true;
+        have_p2  = true;
     }
-    catch (...)
-    {
-        // This rank does not have p2
-    }
+    catch (...) {}
 
-    // Send to root.  Alternatively, you can gather from all ranks, but
-    // typically only one rank "owns" a given point in a distributed mesh.
     double p1_on_root = 0.0, p2_on_root = 0.0;
-    int rank_p1 = -1;
-    int rank_p2 = -1;
+    int    rank_p1 = -1, rank_p2 = -1;
 
-    // If we found p1, send it to root:
     if (have_p1)
     {
         MPI_Send(&local_p1, 1, MPI_DOUBLE, 0, 111, MPI_COMM_WORLD);
         MPI_Send(&mpi_rank, 1, MPI_INT, 0, 112, MPI_COMM_WORLD);
     }
-    // If we found p2, send it to root:
     if (have_p2)
     {
         MPI_Send(&local_p2, 1, MPI_DOUBLE, 0, 221, MPI_COMM_WORLD);
         MPI_Send(&mpi_rank, 1, MPI_INT, 0, 222, MPI_COMM_WORLD);
     }
 
-    // Only root receives
     if (mpi_rank == 0)
     {
+        // We expect exactly one sender for p1 and p2
         MPI_Status status;
-        // We expect exactly one sender for p1, so:
         MPI_Recv(&p1_on_root, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 111, MPI_COMM_WORLD, &status);
-        MPI_Recv(&rank_p1, 1, MPI_INT, status.MPI_SOURCE, 112, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        // Same for p2:
+        MPI_Recv(&rank_p1,    1, MPI_INT,    status.MPI_SOURCE, 112, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&p2_on_root, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 221, MPI_COMM_WORLD, &status);
-        MPI_Recv(&rank_p2, 1, MPI_INT, status.MPI_SOURCE, 222, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&rank_p2,    1, MPI_INT,    status.MPI_SOURCE, 222, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         const double p_diff = p1_on_root - p2_on_root;
 
         // -------------------------------------------------
-        // 5) Print or write to a file
+        // 5) Print/write output
         // -------------------------------------------------
-        // std::cout << "Time = " << time << "  Drag = " << global_drag
-        //           << "  Lift = " << global_lift
-        //           << "  p_diff(p1-p2) = " << p_diff << std::endl;
-
-        // Append to a CSV file:
-
+        // e.g. append to CSV file
         std::string output_dir = get_output_directory();
-
-        std::string filename = output_dir + "lift_drag_output.csv";
+        std::string filename   = output_dir + "lift_drag_output.csv";
 
         std::ofstream out_file(filename.c_str(), std::ios::app);
         out_file << time << ","
@@ -928,7 +897,7 @@ void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
     TrilinosWrappers::MPI::Vector div_projected(locally_owned_pressure, MPI_COMM_WORLD);
 
     {
-        SolverControl solver_control(2000, 1e-12 * rhs.l2_norm());
+        SolverControl solver_control(2000, 1e-7 * rhs.l2_norm());
         SolverCG<TrilinosWrappers::MPI::Vector> solver_cg(solver_control);
 
         TrilinosWrappers::PreconditionIC prec;

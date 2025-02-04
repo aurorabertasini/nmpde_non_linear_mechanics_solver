@@ -85,7 +85,7 @@ public:
             this->H = H;
             if constexpr (dim == 2)
                 this->uM = 1.5;
-            else
+            else if constexpr (dim == 3)
                 this->uM = 2.25;
         }
 
@@ -679,7 +679,7 @@ protected:
 
     // Assemble the right-hand side of the problem.
     void
-    assemble_rhs(const double &time);
+    assemble_rhs();
 
     // Solve the problem for one time step.
     void
@@ -691,9 +691,6 @@ protected:
 
     void
     set_initial_conditions(TrilinosWrappers::MPI::BlockVector solution_stokes_);
-
-    void
-    compute_lift_drag();
 
     // MPI parallel. /////////////////////////////////////////////////////////////
 
@@ -795,28 +792,16 @@ protected:
 
     std::vector<IndexSet> block_relevant_dofs; //!!!!!!!!!!!!!!!!!!
 
-    // Mass matrix M / deltat.
-    TrilinosWrappers::BlockSparseMatrix mass_matrix;
-
-    // Global matrix.
+    // Time independent matrix
     TrilinosWrappers::BlockSparseMatrix system_matrix;
 
-    // velocity mass
+    // velocity mass.
     TrilinosWrappers::BlockSparseMatrix velocity_mass;
 
-    // Non_linear term matrix.
-    TrilinosWrappers::BlockSparseMatrix convective_matrix;
-
-    // boolean value to choose to reconstruct all the system matrix ad each time step
-    bool RECONSTRUCT_SYSTEM_MATRIX = true;
-
-    // Stiffness matrix K.
-    TrilinosWrappers::BlockSparseMatrix stiffness_matrix;
+    // Complete matrix.
+    TrilinosWrappers::BlockSparseMatrix lhs_matrix;
 
     TrilinosWrappers::BlockSparseMatrix pressure_mass;  //!
-
-
-    TrilinosWrappers::BlockSparseMatrix rhs_matrix;
 
     // Right-hand side vector in the linear system.
     TrilinosWrappers::MPI::BlockVector system_rhs;
