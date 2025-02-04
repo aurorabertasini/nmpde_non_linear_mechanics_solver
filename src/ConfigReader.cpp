@@ -26,7 +26,7 @@ ConfigReader::ConfigReader()
 
 auto ConfigReader::readConfigFile() -> bool
 {
-    std::ifstream file("../parameters.config");
+    std::ifstream file("./parameters.config");
     if (!file.is_open())
     {
         std::cerr << "Error: Config file not found." << '\n';
