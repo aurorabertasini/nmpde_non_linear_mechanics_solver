@@ -457,7 +457,7 @@ template <unsigned int dim>
 void MonolithicNavierStokes<dim>::solve_time_step()
 {
     // Choose the preconditioner type:
-    // 1 = BLOCK DIAGONAL, 2 = SIMPLE, 3 = ASIMPLE, 4 = YOSHIDA.
+    // 1 = BLOCK DIAGONAL, 2 = SIMPLE, 3 = ASIMPLE, 4 = YOSIDA.
     int precond_type = 2; // Set this value as needed
 
     // Local parameters for inner solvers and preconditioner initialization.
@@ -516,15 +516,15 @@ void MonolithicNavierStokes<dim>::solve_time_step()
         break;
     }
     case 4:
-    { // YOSHIDA preconditioner
-        auto yoshida_precondition = std::make_shared<PreconditionYoshida>();
-        yoshida_precondition->initialize(
+    { // YOSIDA preconditioner
+        auto yosida_precondition = std::make_shared<PreconditionYosida>();
+        yosida_precondition->initialize(
             lhs_matrix.block(0, 0), lhs_matrix.block(1, 0),
             lhs_matrix.block(0, 1), velocity_mass.block(0, 0), solution_owned,
             maxiter_inner,
             tol_inner,
             use_ilu);
-        block_precondition = yoshida_precondition;
+        block_precondition = yosida_precondition;
         break;
     }
     default:
