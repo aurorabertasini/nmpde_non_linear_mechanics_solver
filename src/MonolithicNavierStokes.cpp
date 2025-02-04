@@ -403,7 +403,7 @@ void MonolithicNavierStokes<dim>::solve_time_step()
 {
     // Choose the preconditioner type:
     // 1 = BLOCK DIAGONAL, 2 = SIMPLE, 3 = ASIMPLE, 4 = YOSHIDA.
-    int precond_type = 3; // Set this value as needed
+    int precond_type = 1; // Set this value as needed
 
     // Local parameters for inner solvers and preconditioner initialization.
     double alpha = 0.5;                 // Damping parameter for SIMPLE-like preconditioners

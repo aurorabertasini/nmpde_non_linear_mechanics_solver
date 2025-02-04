@@ -8,7 +8,7 @@ template <int dim>
 void SteadyNavierStokes<dim>::run_full_problem_pipeline()
 {
   this->pcout << "===============================================" << std::endl;
-  this->pcout << "Running full pipeline: Stokes -> IncrementalStokes" << std::endl;
+  this->pcout << "Running full pipeline: Stokes -> NonLinearCorrection" << std::endl;
   this->pcout << "===============================================" << std::endl;
 
   // 1) Create a Stokes solver with this object's parameters
@@ -26,19 +26,19 @@ void SteadyNavierStokes<dim>::run_full_problem_pipeline()
   // 3) Retrieve the final solution of the Stokes problem
   TrilinosWrappers::MPI::BlockVector stokes_solution = stokes_problem.get_solution();
 
-  // 4) Create an IncrementalStokes solver from the Stokes problem
-  IncrementalStokes<dim> incremental_stokes(stokes_problem);
+  // 4) Create an NonLinearCorrection solver from the Stokes problem
+  NonLinearCorrection<dim> non_linear_correction(stokes_problem);
 
   // 5) Set the initial condition of the incremental solver to the Stokes solution
-  incremental_stokes.set_initial_conditions(stokes_solution);
+  non_linear_correction.set_initial_conditions(stokes_solution);
 
   // 6) Run the incremental solver steps
-  incremental_stokes.setup();
-  incremental_stokes.solve();   // Assemble incorporated in solve()
-  incremental_stokes.output();
+  non_linear_correction.setup();
+  non_linear_correction.solve();   // Assemble incorporated in solve()
+  non_linear_correction.output();
 
   // 7) Optionally compute lift & drag
-  incremental_stokes.compute_lift_drag();
+  non_linear_correction.compute_lift_drag();
 }
 
 template <int dim>
@@ -485,11 +485,11 @@ std::string Stokes<dim>::get_output_directory()
 }
 
 // ===============================
-// IncrementalStokes<dim> methods
+// NonLinearCorrection<dim> methods
 // ===============================
 
 template <int dim>
-void IncrementalStokes<dim>::setup()
+void NonLinearCorrection<dim>::setup()
 {
   // We do NOT read the mesh again because it was already copied in the construtor.
   // We do want to initialize the FE system, quadrature, etc.
@@ -629,7 +629,7 @@ void IncrementalStokes<dim>::setup()
 }
 
 template <int dim>
-void IncrementalStokes<dim>::assemble()
+void NonLinearCorrection<dim>::assemble()
 {
   const unsigned int dofs_per_cell = this->fe->dofs_per_cell;
   const unsigned int n_q           = this->quadrature->size();
@@ -753,7 +753,7 @@ void IncrementalStokes<dim>::assemble()
 
 
 template <int dim>
-void IncrementalStokes<dim>::solve()
+void NonLinearCorrection<dim>::solve()
 {
   for (iter = 0; iter < maxIter; ++iter)
   {
@@ -816,7 +816,7 @@ void IncrementalStokes<dim>::solve()
 }
 
 template <int dim>
-void IncrementalStokes<dim>::output()
+void NonLinearCorrection<dim>::output()
 {
   this->pcout << "===============================================" << std::endl;
 
@@ -849,7 +849,7 @@ void IncrementalStokes<dim>::output()
   std::string numProcessors = std::to_string(this->mpi_size);
   numProcessors += (this->mpi_size == 1) ? "_processor" : "_processors";
 
-  const std::string output_file_name = "output-IncrementalStokes-" + numProcessors;
+  const std::string output_file_name = "output-NonLinearCorrection-" + numProcessors;
   data_out.write_vtu_with_pvtu_record(this->get_output_directory(),
                                       output_file_name,
                                       0,
@@ -861,7 +861,7 @@ void IncrementalStokes<dim>::output()
 
 
 template <int dim>
-void IncrementalStokes<dim>::compute_lift_drag()
+void NonLinearCorrection<dim>::compute_lift_drag()
 {
     // Define quadrature for faces
     QGauss<dim - 1> face_quadrature_formula(3);
@@ -1048,7 +1048,7 @@ void IncrementalStokes<dim>::compute_lift_drag()
 }
 
 template <int dim>
-std::string IncrementalStokes<dim>::get_output_directory()
+std::string NonLinearCorrection<dim>::get_output_directory()
 {
     namespace fs = std::filesystem;
 
@@ -1060,16 +1060,16 @@ std::string IncrementalStokes<dim>::get_output_directory()
     if (!fs::exists("outputs/SteadyNavierStokes"))
         fs::create_directory("outputs/SteadyNavierStokes");
     
-    // 3) Create a subdirectory specific to "IncrementalStokes"
-    if (!fs::exists("outputs/SteadyNavierStokes/IncrementalStokes"))
-        fs::create_directory("outputs/SteadyNavierStokes/IncrementalStokes");
+    // 3) Create a subdirectory specific to "NonLinearCorrection"
+    if (!fs::exists("outputs/SteadyNavierStokes/NonLinearCorrection"))
+        fs::create_directory("outputs/SteadyNavierStokes/NonLinearCorrection");
 
     // 4) Further subdivide by Reynolds number (or any relevant parameter)
     const std::string sub_dir_name = 
         "outputs_reynolds_" + std::to_string(static_cast<int>(this->Re));
 
     fs::path sub_dir_path = 
-        fs::path("outputs/SteadyNavierStokes/IncrementalStokes") / sub_dir_name;
+        fs::path("outputs/SteadyNavierStokes/NonLinearCorrection") / sub_dir_name;
 
     if (!fs::exists(sub_dir_path))
         fs::create_directory(sub_dir_path);
@@ -1090,8 +1090,8 @@ std::string IncrementalStokes<dim>::get_output_directory()
 // If you only want 2D and 3D, do so here:
 template class SteadyNavierStokes<2>;
 template class Stokes<2>;
-template class IncrementalStokes<2>;
+template class NonLinearCorrection<2>;
 
 template class SteadyNavierStokes<3>;
 template class Stokes<3>;
-template class IncrementalStokes<3>;
+template class NonLinearCorrection<3>;
