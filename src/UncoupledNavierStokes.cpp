@@ -176,7 +176,7 @@ void UncoupledNavierStokes<dim>::assemble_system_velocity()
             const double JxW = fe_values.JxW(q);
 
             const Tensor<1, dim> &u_star = 2.0 * old_val[q] - old_old_val[q];
-            const double u_star_div = 2.0 * old_div[q] - old_old_div[q];
+            // const double u_star_div = 2.0 * old_div[q] - old_old_div[q];
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
@@ -271,7 +271,7 @@ void UncoupledNavierStokes<dim>::assemble_system_pressure()
 
     const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
     const unsigned int n_q = quad.size();
-    const unsigned int n_q_face = fe_face_values.n_quadrature_points;
+    // const unsigned int n_q_face = fe_face_values.n_quadrature_points;
 
     FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
     Vector<double> cell_rhs(dofs_per_cell);

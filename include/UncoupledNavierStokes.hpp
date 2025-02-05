@@ -53,6 +53,35 @@ template <unsigned int dim>
 class UncoupledNavierStokes
 {
 public:
+
+    UncoupledNavierStokes(
+        const std::string &mesh_file_name_,
+        const unsigned int &degree_velocity_,
+        const unsigned int &degree_pressure_,
+        const double &T_,
+        const double &deltat_,
+        const double &reynolds_number_)
+        : fe_velocity(FE_SimplexP<dim>(2), dim),
+        dof_handler_velocity(triangulation),
+        fe_pressure(1),
+        dof_handler_pressure(triangulation),
+        mesh_file_name(mesh_file_name_),
+        degree_velocity(degree_velocity_),
+        degree_pressure(degree_pressure_),
+        reynolds_number(reynolds_number_),
+        T(T_),
+        deltat(deltat_),
+        mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)),
+        mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)),
+        pcout(std::cout, mpi_rank == 0),
+        mesh(MPI_COMM_WORLD),
+        inlet_velocity(H),
+        computing_timer(MPI_COMM_WORLD, pcout,
+                        TimerOutput::summary,
+                        TimerOutput::wall_times)
+        {
+            this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
+        }
     class ForcingTerm : public Function<dim>
     {
     public:
@@ -129,7 +158,7 @@ public:
         }
 
         virtual void
-        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        vector_value(const Point<dim> & /*p*/, Vector<double> &values) const override
         {
             values[0] = 0.0;
 
@@ -138,7 +167,7 @@ public:
         }
 
         virtual double
-        value(const Point<dim> &p, const unsigned int component = 0) const override
+        value(const Point<dim> & /*p*/, const unsigned int component = 0) const override
         {
             if (component == 0)
                 return 0.0;
@@ -151,7 +180,7 @@ public:
     {
     public:
         virtual void
-        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        vector_value(const Point<dim> & /*p*/, Vector<double> &values) const override
         {
             values[0] = 0.0;
 
@@ -160,7 +189,7 @@ public:
         }
 
         virtual double
-        value(const Point<dim> &p, const unsigned int component = 0) const override
+        value(const Point<dim> & /*p*/, const unsigned int component = 0) const override
         {
             if (component == 0)
                 return 0.0;
@@ -169,12 +198,6 @@ public:
         }
     };
 
-    UncoupledNavierStokes(const std::string &mesh_file_name_,
-                           const unsigned int &degree_velocity_,
-                           const unsigned int &degree_pressure_,
-                           const double &T_,
-                           const double &deltat_,
-                           const double &reynolds_number_);
 
     void setup();
 
@@ -201,16 +224,55 @@ public:
     void pressure_update(bool rotational);
 
 private:
-    Triangulation<dim> triangulation;
+
+    // Height of the channel.
+    const double H = 0.41;
 
     // Velocity FE: Q2 vector
     FESystem<dim> fe_velocity;
+
     DoFHandler<dim> dof_handler_velocity;
-    AffineConstraints<double> constraints_velocity;
 
     // Pressure FE: Q1 scalar
     FE_SimplexP<dim> fe_pressure;
+
     DoFHandler<dim> dof_handler_pressure;
+
+    // Mesh file name.
+    const std::string mesh_file_name;
+
+    // Polynomial degree Velocity.
+    const unsigned int degree_velocity;
+
+    // Polynomial degree Pressure.
+    const unsigned int degree_pressure;
+
+    const double reynolds_number;
+
+    // Final time.
+    const double T;
+
+    // Time step
+    double deltat;
+
+    // Number of MPI processes.
+    const unsigned int mpi_size;
+
+    // This MPI process.
+    const unsigned int mpi_rank;
+
+    ConditionalOStream pcout;
+
+    parallel::fullydistributed::Triangulation<dim> mesh;
+
+    InletVelocity inlet_velocity;
+
+    TimerOutput computing_timer;
+
+    Triangulation<dim> triangulation;
+
+    AffineConstraints<double> constraints_velocity;
+
     AffineConstraints<double> constraints_pressure;
 
     // Owned & relevant dofs
@@ -239,10 +301,8 @@ private:
     TrilinosWrappers::MPI::Vector pressure_solution;
     TrilinosWrappers::MPI::Vector pressure_system_rhs;
 
-    // Final time.
-    const double T;
     unsigned int timestep_number;
-    double deltat;
+
     double time;
 
     // Viscosity
@@ -250,37 +310,9 @@ private:
 
     unsigned int time_step = 0;
 
-    const double reynolds_number;
-
     const double cylinder_radius = 0.1;
 
-    ConditionalOStream pcout;
-
-    TimerOutput computing_timer;
-
     bool rotational = false; 
-
-    // Mesh file name.
-    const std::string mesh_file_name;
-
-    // Polynomial degree Velocity.
-    const unsigned int degree_velocity;
-
-    // Polynomial degree Pressure.
-    const unsigned int degree_pressure;
-
-    // Number of MPI processes.
-    const unsigned int mpi_size;
-
-    // This MPI process.
-    const unsigned int mpi_rank;
-
-    parallel::fullydistributed::Triangulation<dim> mesh;
-
-    InletVelocity inlet_velocity;
-
-    // Height of the channel.
-    const double H = 0.41;
 
     std::vector<double> vec_drag;
 
@@ -297,32 +329,3 @@ private:
     const double rho = 1.0;
 };
 
-template <unsigned int dim>
-UncoupledNavierStokes<dim>::UncoupledNavierStokes(
-    const std::string &mesh_file_name_,
-    const unsigned int &degree_velocity_,
-    const unsigned int &degree_pressure_,
-    const double &T_,
-    const double &deltat_,
-    const double &reynolds_number_)
-    : fe_velocity(FE_SimplexP<dim>(2), dim),
-      dof_handler_velocity(triangulation),
-      fe_pressure(1),
-      dof_handler_pressure(triangulation),
-      mesh_file_name(mesh_file_name_),
-      degree_velocity(degree_velocity_),
-      degree_pressure(degree_pressure_),
-      reynolds_number(reynolds_number_),
-      T(T_),
-      deltat(deltat_),
-      mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)),
-      mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)),
-      pcout(std::cout, mpi_rank == 0),
-      mesh(MPI_COMM_WORLD),
-      inlet_velocity(H),
-      computing_timer(MPI_COMM_WORLD, pcout,
-                      TimerOutput::summary,
-                      TimerOutput::wall_times)
-{
-    this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
-}
