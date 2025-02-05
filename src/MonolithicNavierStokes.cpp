@@ -570,6 +570,8 @@ void MonolithicNavierStokes<dim>::solve()
 
     unsigned int time_step = 0;
 
+    assemble_base_matrix();
+
     while (time < T - 0.5 * deltat)
     {
         time += deltat;
@@ -578,7 +580,6 @@ void MonolithicNavierStokes<dim>::solve()
         pcout << "n = " << std::setw(3) << time_step << ", t = " << std::setw(5)
               << time << ":" << std::flush;
         
-        assemble_base_matrix();
         add_convective_term();
         assemble_rhs();
         solve_time_step();
