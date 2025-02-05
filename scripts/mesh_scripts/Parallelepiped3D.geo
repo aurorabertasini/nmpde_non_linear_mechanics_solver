@@ -1,5 +1,3 @@
-
-
 // Gmsh script to define a 3D flow domain with an inner parallelepiped obstacle
 // without using the OpenCASCADE kernel
 
