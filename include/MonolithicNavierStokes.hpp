@@ -131,7 +131,7 @@ public:
         }
 
         virtual void
-        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        vector_value(const Point<dim> &/*p*/, Vector<double> &values) const override
         {
             values[0] = 0.0;
 
@@ -140,7 +140,7 @@ public:
         }
 
         virtual double
-        value(const Point<dim> &p, const unsigned int component = 0) const override
+        value(const Point<dim> &/*p*/, const unsigned int component = 0) const override
         {
             if (component == 0)
                 return 0.0;
@@ -154,7 +154,7 @@ public:
     {
     public:
         virtual void
-        vector_value(const Point<dim> &p, Vector<double> &values) const override
+        vector_value(const Point<dim> &/*p*/, Vector<double> &values) const override
         {
             values[0] = 0.0;
 
@@ -163,7 +163,7 @@ public:
         }
 
         virtual double
-        value(const Point<dim> &p, const unsigned int component = 0) const override
+        value(const Point<dim> &/*p*/, const unsigned int component = 0) const override
         {
             if (component == 0)
                 return 0.0;
@@ -654,6 +654,7 @@ class PreconditionYosida : public BlockPrecondition {
         const double &T_,
         const double &deltat_,
         const double &re_);
+        
     // Initialization.
     void
     setup();
@@ -670,7 +671,7 @@ class PreconditionYosida : public BlockPrecondition {
     get_output_directory();
 
 protected:
-    // Assemble the matrix without the non-linear term.
+    
     void
     assemble_base_matrix();
 
@@ -692,42 +693,58 @@ protected:
     void
     set_initial_conditions(TrilinosWrappers::MPI::BlockVector solution_stokes_);
 
-    // MPI parallel. /////////////////////////////////////////////////////////////
-
-    // extractors for velocity and pressure.
-    FEValuesExtractors::Vector velocity;
-
-    FEValuesExtractors::Scalar pressure;
-
     // Number of MPI processes.
     const unsigned int mpi_size;
 
     // This MPI process.
     const unsigned int mpi_rank;
 
+    // Parallel output stream.
+    ConditionalOStream pcout; 
+
+    // Height of the channel.
+    const double H = 0.41;
+
+    // Cylinder radius.
+    const double cylinder_radius = 0.1;
+
+    // outlet pressure
+    const double p_out = 0.0;
+
+    // Mesh file name.
+    const std::string mesh_file_name;
+
+    // Polynomial degree Velocity.
+    const unsigned int degree_velocity;
+
+    // Polynomial degree Pressure.
+    const unsigned int degree_pressure;
+    
+    // Final time.
+    const double T;
+
+    // Time step.
+    const double deltat;
+
+    // Inlet velocity.
+    InletVelocity inlet_velocity;
+
+    // extractors for velocity and pressure.
+    FEValuesExtractors::Vector velocity;
+
+    FEValuesExtractors::Scalar pressure;
+    
+    // Mesh.
+    parallel::fullydistributed::Triangulation<dim> mesh;
+
+    // Reynolds number.
+    const double reynolds_number;
+
     // Affine constraints.
     AffineConstraints<double> constraints;
 
     // diffusion coefficient
     double nu;
-
-    // Reynolds number.
-    const double reynolds_number;
-
-    // Height of the channel.
-    const double H = 0.41;
-
-    // Inlet velocity.
-    InletVelocity inlet_velocity;
-
-    // Cylinder radius.
-    const double cylinder_radius = 0.1;
-
-    // // Transport coefficient.
-    // Function_t transport;
-
-    // outlet pressure
-    const double p_out = 0.0;
 
     // Forcing term.
     ForcingTerm forcing_term;
@@ -738,37 +755,14 @@ protected:
     // Function for the initial condition
     Function_u0 initial_condition;
 
-    // // Exact solution.
-    // ExactSolution exact_solution;
-
     // Current time.
     double time;
-
-    // Final time.
-    const double T;
 
     double lift; 
 
     double drag;
 
     const double rho = 1.0;
-
-    // Discretization. ///////////////////////////////////////////////////////////
-
-    // Mesh file name.
-    const std::string mesh_file_name;
-
-    // Polynomial degree Velocity.
-    const unsigned int degree_velocity;
-
-    // Polynomial degree Pressure.
-    const unsigned int degree_pressure;
-
-    // Time step.
-    const double deltat;
-
-    // Mesh.
-    parallel::fullydistributed::Triangulation<dim> mesh;
 
     // Finite element space.
     std::unique_ptr<FiniteElement<dim>> fe;
@@ -811,8 +805,6 @@ protected:
 
     // System solution (including ghost elements).
     TrilinosWrappers::MPI::BlockVector solution;
-
-    ConditionalOStream pcout; // Parallel output stream.
 
     std::vector<double> vec_drag;
     std::vector<double> vec_lift;

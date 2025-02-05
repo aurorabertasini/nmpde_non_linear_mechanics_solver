@@ -18,10 +18,6 @@ int main(int argc, char *argv[])
         std::cout << "Welcome to the Navier-Stokes solver" << std::endl;
     }
 
-    double cylinder_radius = 0.1;
-
-    double uM = 1.5;
-
     ConfigReader configReader;
 
     std::filesystem::path mesh2DPath = configReader.getMesh2DPath();
@@ -31,8 +27,6 @@ int main(int argc, char *argv[])
     double simulationPeriod = configReader.getSimulationPeriod();
     double timeStep = configReader.getTimeStep();
     double Re = configReader.getRe();
-
-    double nu = (uM * cylinder_radius) / Re;
 
     int choice = 0;
 
