@@ -54,6 +54,31 @@ template <unsigned int dim>
 class MonolithicNavierStokes
 {
 public:
+
+    MonolithicNavierStokes(
+        const std::string &mesh_file_name_,
+        const unsigned int &degree_velocity_,
+        const unsigned int &degree_pressure_,
+        const double &T_,
+        const double &deltat_,
+        const double &re_)
+        : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+        , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
+        , pcout(std::cout, mpi_rank == 0)
+        , mesh_file_name(mesh_file_name_)
+        , degree_velocity(degree_velocity_)
+        , degree_pressure(degree_pressure_)
+        , T(T_)
+        , deltat(deltat_)
+        , inlet_velocity(H)
+        , velocity(0)
+        , pressure(dim)
+        , mesh(MPI_COMM_WORLD)
+        , reynolds_number(re_)
+    {
+        this->nu = (2./3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
+    }
+
     // 2. Function for the transport coefficient.
     class ForcingTerm : public Function<dim>
     {
@@ -646,15 +671,6 @@ class PreconditionYosida : public BlockPrecondition {
 /*****************************************************************/
 /*****************************************************************/
 
-    // parameter as constructor arguments.
-    MonolithicNavierStokes(
-        const std::string &mesh_file_name_,
-        const unsigned int &degree_velocity_,
-        const unsigned int &degree_pressure_,
-        const double &T_,
-        const double &deltat_,
-        const double &re_);
-        
     // Initialization.
     void
     setup();
@@ -811,30 +827,5 @@ protected:
     std::vector<double> vec_drag_coeff;
     std::vector<double> vec_lift_coeff;
 };
-
-template <unsigned int dim>
-MonolithicNavierStokes<dim>::MonolithicNavierStokes(
-        const std::string &mesh_file_name_,
-        const unsigned int &degree_velocity_,
-        const unsigned int &degree_pressure_,
-        const double &T_,
-        const double &deltat_,
-        const double &re_)
-        : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
-        , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
-        , pcout(std::cout, mpi_rank == 0)
-        , mesh_file_name(mesh_file_name_)
-        , degree_velocity(degree_velocity_)
-        , degree_pressure(degree_pressure_)
-        , T(T_)
-        , deltat(deltat_)
-        , inlet_velocity(H)
-        , velocity(0)
-        , pressure(dim)
-        , mesh(MPI_COMM_WORLD)
-        , reynolds_number(re_)
-    {
-        this->nu = (2./3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
-    }
 
 #endif
