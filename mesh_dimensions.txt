@@ -1,0 +1,5 @@
+fine_fine           0.00625
+fine                0.0125    
+normal              0.025
+coarse              0.05
+coarse_coarse       0.1
