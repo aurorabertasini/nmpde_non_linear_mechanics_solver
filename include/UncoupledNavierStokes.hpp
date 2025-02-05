@@ -53,7 +53,6 @@ template <unsigned int dim>
 class UncoupledNavierStokes
 {
 public:
-
     UncoupledNavierStokes(
         const std::string &mesh_file_name_,
         const unsigned int &degree_velocity_,
@@ -79,9 +78,10 @@ public:
         computing_timer(MPI_COMM_WORLD, pcout,
                         TimerOutput::summary,
                         TimerOutput::wall_times)
-        {
-            this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
-        }
+    {
+        this->nu = (2. / 3.) * inlet_velocity.get_u_max() * cylinder_radius / reynolds_number;
+    }
+
     class ForcingTerm : public Function<dim>
     {
     public:
@@ -198,7 +198,6 @@ public:
         }
     };
 
-
     void setup();
 
     void assemble_system_velocity();
@@ -228,14 +227,14 @@ private:
     // Height of the channel.
     const double H = 0.41;
 
+    Triangulation<dim> triangulation;
+
     // Velocity FE: Q2 vector
     FESystem<dim> fe_velocity;
-
     DoFHandler<dim> dof_handler_velocity;
 
     // Pressure FE: Q1 scalar
     FE_SimplexP<dim> fe_pressure;
-
     DoFHandler<dim> dof_handler_pressure;
 
     // Mesh file name.
@@ -251,8 +250,7 @@ private:
 
     // Final time.
     const double T;
-
-    // Time step
+    unsigned int timestep_number;
     double deltat;
 
     // Number of MPI processes.
@@ -260,7 +258,7 @@ private:
 
     // This MPI process.
     const unsigned int mpi_rank;
-
+    
     ConditionalOStream pcout;
 
     parallel::fullydistributed::Triangulation<dim> mesh;
@@ -268,8 +266,6 @@ private:
     InletVelocity inlet_velocity;
 
     TimerOutput computing_timer;
-
-    Triangulation<dim> triangulation;
 
     AffineConstraints<double> constraints_velocity;
 
@@ -301,8 +297,6 @@ private:
     TrilinosWrappers::MPI::Vector pressure_solution;
     TrilinosWrappers::MPI::Vector pressure_system_rhs;
 
-    unsigned int timestep_number;
-
     double time;
 
     // Viscosity
@@ -310,9 +304,12 @@ private:
 
     unsigned int time_step = 0;
 
+
     const double cylinder_radius = 0.1;
 
+
     bool rotational = false; 
+
 
     std::vector<double> vec_drag;
 
