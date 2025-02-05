@@ -558,8 +558,9 @@ void UncoupledNavierStokes<dim>::run()
         pressure_update(rotational);
 
         compute_lift_drag();
+
         output_results();
-        // print every 100 time steps 
+        // print every 100 time steps
         // if (time_step % 100 == 0)
         // {
         //     output_results();
@@ -595,12 +596,11 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
 
     // We'll store velocity gradients and pressure values at quadrature points
     std::vector<Tensor<2, dim>> velocity_gradients(n_face_q_points);
-    std::vector<double>         pressure_values(n_face_q_points);
+    std::vector<double> pressure_values(n_face_q_points);
 
     double local_drag = 0.0;
     double local_lift = 0.0;
 
-    
     // Mean inflow velocity
     double u_max = inlet_velocity.get_u_max();
     double u_mean = 2.0 * u_max / 3.0;
@@ -647,7 +647,7 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
                     const double p = pressure_values[q];
                     const Tensor<2, dim> grad_u = velocity_gradients[q];
                     const Tensor<1, dim> normal_vec = fe_face_values_velocity.normal_vector(q);
-                    const double         JxW = fe_face_values_velocity.JxW(q);
+                    const double JxW = fe_face_values_velocity.JxW(q);
 
                     // Build fluid_stress = -p I + 2 nu e(u)
                     // (if nu is kinematic viscosity, multiply by rho if you want μ=ρν)
@@ -671,9 +671,9 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
                     local_drag += -coefficient * force_contribution[0];
                     local_lift += coefficient * force_contribution[1];
                 } // q loop
-            }     // boundary check
-        }         // face loop
-    }             // cell loop
+            } // boundary check
+        } // face loop
+    } // cell loop
 
     // -------------------------------------------------
     // 3) MPI: sum up partial forces to rank 0
@@ -686,27 +686,45 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
     // 4) Compute pressure difference between points p1 & p2
     // -------------------------------------------------
     Point<dim> p1, p2;
-    p1[0] = 0.15;  p1[1] = 0.20;
-    p2[0] = 0.25;  p2[1] = 0.20;
+    if constexpr (dim == 2)
+    {
+        p1[0] = 0.15;
+        p1[1] = 0.20;
+        p2[0] = 0.25;
+        p2[1] = 0.20;
+    }
+    else if constexpr (dim == 3)
+    {
+        p1[0] = 0.45;
+        p1[1] = 0.20;
+        p1[2] = 0.205;
+        p2[0] = 0.55;
+        p2[1] = 0.20;
+        p2[2] = 0.205;
+    }
 
     double local_p1 = 0.0, local_p2 = 0.0;
-    bool   have_p1  = false, have_p2  = false;
+    bool have_p1 = false, have_p2 = false;
 
     try
     {
         local_p1 = VectorTools::point_value(dof_handler_pressure, pressure_solution, p1);
-        have_p1  = true;
+        have_p1 = true;
     }
-    catch (...) {}
+    catch (...)
+    {
+    }
     try
     {
         local_p2 = VectorTools::point_value(dof_handler_pressure, pressure_solution, p2);
-        have_p2  = true;
+        have_p2 = true;
     }
-    catch (...) {}
+    catch (...)
+    {
+    }
 
     double p1_on_root = 0.0, p2_on_root = 0.0;
-    int    rank_p1 = -1, rank_p2 = -1;
+    int rank_p1 = -1, rank_p2 = -1;
 
     if (have_p1)
     {
@@ -724,9 +742,9 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
         // We expect exactly one sender for p1 and p2
         MPI_Status status;
         MPI_Recv(&p1_on_root, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 111, MPI_COMM_WORLD, &status);
-        MPI_Recv(&rank_p1,    1, MPI_INT,    status.MPI_SOURCE, 112, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&rank_p1, 1, MPI_INT, status.MPI_SOURCE, 112, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&p2_on_root, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 221, MPI_COMM_WORLD, &status);
-        MPI_Recv(&rank_p2,    1, MPI_INT,    status.MPI_SOURCE, 222, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&rank_p2, 1, MPI_INT, status.MPI_SOURCE, 222, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         const double p_diff = p1_on_root - p2_on_root;
 
@@ -735,7 +753,7 @@ void UncoupledNavierStokes<dim>::compute_lift_drag()
         // -------------------------------------------------
         // e.g. append to CSV file
         std::string output_dir = get_output_directory();
-        std::string filename   = output_dir + "lift_drag_output.csv";
+        std::string filename = output_dir + "lift_drag_output.csv";
 
         std::ofstream out_file(filename.c_str(), std::ios::app);
         out_file << time << ","
@@ -782,7 +800,6 @@ std::string UncoupledNavierStokes<dim>::get_output_directory()
 
     return sub_dir_path.string();
 }
-
 
 template <unsigned int dim>
 void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
@@ -866,7 +883,7 @@ void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
         for (unsigned int q = 0; q < n_q; ++q)
         {
             const double div_val = local_div_u_tilde[q];
-            const double JxW    = fe_values_p.JxW(q);
+            const double JxW = fe_values_p.JxW(q);
 
             for (unsigned int i = 0; i < dofs_per_cell_p; ++i)
             {
@@ -913,7 +930,7 @@ void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
     // 4) Now apply the update:
     // p^{n+1} = p^n + Δp - ν * div_projected
     // (The user formula does not have a Δt factor, but add it if your scheme needs it.)
-    pressure_solution.add(deltap);           // p^{n+1} = p^n + Δp
+    pressure_solution.add(deltap);             // p^{n+1} = p^n + Δp
     pressure_solution.add(-nu, div_projected); // p^{n+1} -= ν * div(u_tilde)
 
     pressure_solution.update_ghost_values();

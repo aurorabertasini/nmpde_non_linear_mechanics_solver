@@ -232,10 +232,10 @@ void MonolithicNavierStokes<dim>::assemble_base_matrix()
                     cell_system_matrix(i, j) += nu * scalar_product(grad_phi_u[i], grad_phi_u[j]) * fe_values.JxW(q);
 
                     // Pressure term in the momentum equation
-                    cell_system_matrix(i, j) -= phi_p[i] * div_phi_u[j] * fe_values.JxW(q);
+                    cell_system_matrix(i, j) -= phi_p[j] * div_phi_u[i] * fe_values.JxW(q);
 
                     // Pressure term in the continuity equation
-                    cell_system_matrix(i, j) -= phi_p[j] * div_phi_u[i] * fe_values.JxW(q);
+                    cell_system_matrix(i, j) += phi_p[i] * div_phi_u[j] * fe_values.JxW(q);
 
                     pressure_mass_cell_matrix(i, j) += fe_values[pressure].value(j, q) *
                                                        fe_values[pressure].value(i, q) /
