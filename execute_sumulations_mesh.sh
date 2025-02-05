@@ -2,7 +2,7 @@
 
 # Task counts and meshes to test
 task_counts=(1 10 20 30)
-meshes=("mesh/Cylinder2D_fine_fine.msh" "mesh/Cylinder2D_fine.msh" "mesh/Cylinder2D_normal.msh" "mesh/Cylinder2D_coarse.msh" "mesh/Cylinder2D_coarse_coarse.msh")  # Replace with actual mesh paths
+meshes=("mesh/Cylinder2D_super_super_fine.msh" "mesh/Cylinder2D_super_fine.msh")  # Replace with actual mesh paths
 
 for ntasks in "${task_counts[@]}"; do
     for mesh_path in "${meshes[@]}"; do

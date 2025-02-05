@@ -1,0 +1,20 @@
+For Strong Scalability Test 
+
+h = 0.1
+Total Time = 2 sec
+Deltat = 0.005 sec
+Reynolds Number = 100
+
+For Varying Meshes Test
+Total Time = 2 sec
+Deltat = 0.005 sec
+Reynolds Number = 100
+
+Mesh Sizes:
+-   super_super_fine    0.00015625
+-   super_fine          0.0003125
+-   fine_fine           0.00625
+-   fine                0.0125    
+-   normal              0.025
+-   coarse              0.05
+-   coarse_coarse       0.1
