@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
 
     if (mpi_rank == 0)
     {
-        std::ofstream file_out("result_uncoupled.csv", std::ios::app);
+        std::ofstream file_out("result_monolithic.csv", std::ios::app);
         if (!file_out)
         {
             std::cerr << "Error: Could not open result_uncoupled.csv for appending.\n";
