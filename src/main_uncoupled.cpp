@@ -13,13 +13,21 @@ int main(int argc, char *argv[])
 
     ConfigReader configReader;
 
-    std::filesystem::path mesh2DPath      = configReader.getMesh2DPath();
-    std::filesystem::path mesh3DPath      = configReader.getMesh3DPath();
-    int degreeVelocity                    = configReader.getDegreeVelocity();
-    int degreePressure                    = configReader.getDegreePressure();
-    double simulationPeriod               = configReader.getSimulationPeriod();
-    double timeStep                       = configReader.getTimeStep();
-    double Re                             = configReader.getRe();
+    // Get mesh path from command line or config
+    std::filesystem::path mesh2DPath;
+    if (argc >= 2) {
+        mesh2DPath = argv[1];  // Use first command-line argument
+    } else {
+        mesh2DPath = configReader.getMesh2DPath();  // Fallback to config
+    }
+
+    // Remaining parameters from config (3D path unused in this 2D simulation)
+    std::filesystem::path mesh3DPath = configReader.getMesh3DPath();
+    int degreeVelocity = configReader.getDegreeVelocity();
+    int degreePressure = configReader.getDegreePressure();
+    double simulationPeriod = configReader.getSimulationPeriod();
+    double timeStep = configReader.getTimeStep();
+    double Re = configReader.getRe();
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -36,15 +44,14 @@ int main(int argc, char *argv[])
 
     if (mpi_rank == 0)
     {
-        std::ofstream file_out("result_uncoupled.csv", std::ios::app);
+        std::ofstream file_out("result_uncoupled_mesh.csv", std::ios::app);
         if (!file_out)
         {
             std::cerr << "Error: Could not open result_uncoupled.csv for appending.\n";
             return 1;
         }
 
-        file_out << mpi_size << "," << elapsed.count() << std::endl;
-        
+        file_out << mesh2DPath << "," << mpi_size << "," << elapsed.count() << std::endl;
     }
 
     return 0;

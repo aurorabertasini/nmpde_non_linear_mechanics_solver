@@ -15,8 +15,22 @@ int main(int argc, char *argv[])
 
     ConfigReader configReader;
 
-    std::filesystem::path mesh2DPath = configReader.getMesh2DPath();
+    // Determine the mesh path from command line or config
+    std::filesystem::path mesh2DPath;
+    if (argc >= 2)
+    {
+        // Use the command-line argument as the mesh path
+        mesh2DPath = argv[1];
+    }
+    else
+    {
+        // Fall back to the configuration file
+        mesh2DPath = configReader.getMesh2DPath();
+    }
+
+    // The 3D mesh path is not used in this example but remains for completeness
     std::filesystem::path mesh3DPath = configReader.getMesh3DPath();
+
     int degreeVelocity = configReader.getDegreeVelocity();
     int degreePressure = configReader.getDegreePressure();
     double simulationPeriod = configReader.getSimulationPeriod();
@@ -34,14 +48,14 @@ int main(int argc, char *argv[])
 
     if (mpi_rank == 0)
     {
-        std::ofstream file_out("result_monolithic.csv", std::ios::app);
+        std::ofstream file_out("result_monolithic_mesh.csv", std::ios::app);
         if (!file_out)
         {
             std::cerr << "Error: Could not open result_uncoupled.csv for appending.\n";
             return 1;
         }
 
-        file_out << mpi_size << "," << elapsed.count() << std::endl;
+        file_out << mesh2DPath << "," << mpi_size << "," << elapsed.count() << std::endl;
         
     }
     return 0;
