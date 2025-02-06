@@ -1,159 +1,7 @@
-#include <deal.II/base/function.h>
-#include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/timer.h>
-#include <deal.II/base/utilities.h>
-#include <deal.II/base/logstream.h>
-#include <deal.II/base/conditional_ostream.h>
-#include <deal.II/base/mpi.h>
+#ifndef UNCOUPLEDNAVIERSTOKES_HPP
+#define UNCOUPLEDNAVIERSTOKES_HPP
 
-#include <deal.II/base/mpi.h>
-#include <deal.II/lac/affine_constraints.h> // instead of "constraint_matrix.h"
-#include <deal.II/lac/dynamic_sparsity_pattern.h>
-#include <deal.II/lac/sparse_matrix.h>
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/precondition.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_solver.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-#include <deal.II/lac/trilinos_vector.h>
-
-#include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_q.h>
-#include <deal.II/fe/fe_values.h>
-
-#include <deal.II/grid/tria.h>
-#include <deal.II/grid/grid_generator.h>
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/numerics/vector_tools.h>
-#include <deal.II/numerics/data_out.h>
-
-#include <fstream>
-#include <iostream>
-#include <memory> // for std::shared_ptr
-#include <deal.II/base/function.h>
-#include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/timer.h>
-#include <deal.II/base/utilities.h>
-#include <deal.II/base/logstream.h>
-#include <deal.II/base/conditional_ostream.h>
-
-#include <deal.II/base/mpi.h>
-#include <deal.II/lac/affine_constraints.h> // instead of "constraint_matrix.h"
-#include <deal.II/lac/dynamic_sparsity_pattern.h>
-#include <deal.II/lac/sparse_matrix.h>
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/precondition.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_solver.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-#include <deal.II/lac/trilinos_vector.h>
-
-#include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_q.h>
-#include <deal.II/fe/fe_values.h>
-
-#include <deal.II/grid/tria.h>
-#include <deal.II/grid/grid_generator.h>
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/numerics/vector_tools.h>
-#include <deal.II/numerics/data_out.h>
-
-#include <fstream>
-#include <iostream>
-#include <memory> // for std::shared_ptrù
-
-#include <deal.II/base/conditional_ostream.h>
-#include <deal.II/base/quadrature_lib.h>
-#include <deal.II/grid/grid_tools.h>
-#include <deal.II/distributed/fully_distributed_tria.h>
-#include <deal.II/base/quadrature_lib.h>
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/fe/fe_q.h>
-#include <deal.II/fe/fe_values.h>
-
-#include <deal.II/fe/fe_simplex_p.h>
-#include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_values.h>
-#include <deal.II/fe/fe_values_extractors.h>
-#include <deal.II/fe/mapping_fe.h>
-
-#include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/grid_in.h>
-#include <deal.II/grid/grid_out.h>
-#include <deal.II/grid/tria.h>
-
-#include <deal.II/grid/grid_in.h>
-
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/matrix_tools.h>
-#include <deal.II/numerics/vector_tools.h>
-#include <deal.II/base/quadrature_lib.h>
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/fe/fe_simplex_p.h>
-#include <deal.II/fe/fe_values.h>
-
-#include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/grid_in.h>
-#include <deal.II/grid/grid_out.h>
-#include <deal.II/grid/tria.h>
-
-#include <deal.II/lac/dynamic_sparsity_pattern.h>
-#include <deal.II/lac/precondition.h>
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/sparse_matrix.h>
-#include <deal.II/lac/vector.h>
-
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/matrix_tools.h>
-#include <deal.II/numerics/vector_tools.h>
-
-// ---------------------------------------------------------------------
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_renumbering.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/fe/fe_simplex_p.h>
-#include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_values.h>
-#include <deal.II/fe/fe_values_extractors.h>
-#include <deal.II/fe/mapping_fe.h>
-#include <deal.II/grid/grid_tools.h>
-#include <deal.II/distributed/fully_distributed_tria.h>
-#include <deal.II/grid/grid_in.h>
-
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/trilinos_block_sparse_matrix.h>
-#include <deal.II/lac/trilinos_parallel_block_vector.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/matrix_tools.h>
-#include <deal.II/numerics/vector_tools.h>
-
-#include <filesystem>
-#include <fstream>
-#include <iostream>
+#include "includes_file.hpp"
 
 using namespace dealii;
 
@@ -467,10 +315,10 @@ public:
         }
 
     private:
-        mutable EthierSteinmanVelocity exact_velocity;
-        mutable EthierSteinmanPressure exact_pressure;
 
         const double nu;
+        mutable EthierSteinmanVelocity exact_velocity;
+        mutable EthierSteinmanPressure exact_pressure;
     };
 
     UncoupledNavierStokes(const std::string &mesh_file_name_,
@@ -523,17 +371,42 @@ private:
 
     void compute_errors();
 
-    Triangulation<dim> triangulation;
-
     // Velocity FE: Q2 vector
     FESystem<dim> fe_velocity;
+
+    Triangulation<dim> triangulation;
+
     DoFHandler<dim> dof_handler_velocity;
     AffineConstraints<double> constraints_velocity;
 
     // Pressure FE: Q1 scalar
     FE_SimplexP<dim> fe_pressure;
     DoFHandler<dim> dof_handler_pressure;
+
     AffineConstraints<double> constraints_pressure;
+
+    // Mesh file name.
+    const std::string mesh_file_name;
+
+    // Polynomial degree Velocity.
+    const unsigned int degree_velocity;
+
+    // Polynomial degree Pressure.
+    const unsigned int degree_pressure;
+
+    // Final time.
+    const double T;
+    unsigned int timestep_number;
+    double deltat;
+    double time = 0;
+
+    // Number of MPI processes.
+    const unsigned int mpi_size;
+
+    // This MPI process.
+    const unsigned int mpi_rank;
+
+    ConditionalOStream pcout;
 
     // Owned & relevant dofs
     IndexSet locally_owned_velocity;
@@ -560,12 +433,6 @@ private:
     TrilinosWrappers::MPI::Vector pressure_solution;
     TrilinosWrappers::MPI::Vector pressure_system_rhs;
 
-    // Final time.
-    const double T;
-    unsigned int timestep_number;
-    double deltat;
-    double time = 0;
-
     // Viscosity
     double nu = 1.;
 
@@ -575,26 +442,9 @@ private:
 
     bool rotational = true;
 
-    ConditionalOStream pcout;
+    parallel::fullydistributed::Triangulation<dim> mesh;
 
     TimerOutput computing_timer;
-
-    // Mesh file name.
-    const std::string mesh_file_name;
-
-    // Polynomial degree Velocity.
-    const unsigned int degree_velocity;
-
-    // Polynomial degree Pressure.
-    const unsigned int degree_pressure;
-
-    // Number of MPI processes.
-    const unsigned int mpi_size;
-
-    // This MPI process.
-    const unsigned int mpi_rank;
-
-    parallel::fullydistributed::Triangulation<dim> mesh;
 
     EthierSteinmanVelocity exact_velocity3D;
 
@@ -668,3 +518,5 @@ UncoupledNavierStokes<dim>::UncoupledNavierStokes(
       neumann_function3D(nu)
 {
 }
+
+#endif

@@ -1,4 +1,5 @@
 #include "../include/MonolithicNavierStokes.hpp"
+#include "../include/preconditioners.hpp"
 
 template <unsigned int dim>
 void MonolithicNavierStokes<dim>::setup()
@@ -387,18 +388,17 @@ template <unsigned int dim>
 void MonolithicNavierStokes<dim>::solve_time_step()
 {
     // Choose the preconditioner type:
-    // 1 = BLOCK DIAGONAL, 2 = SIMPLE, 3 = ASIMPLE, 4 = YOSIDA.
-    int precond_type = 3; // Set this value as needed
+    // 1 = SIMPLE, 2 = ASIMPLE, 3 = YOSIDA, 4 = AYOSIDA.
+    static constexpr int precond_type = 1; // Set this value as needed
 
     // Local parameters for inner solvers and preconditioner initialization.
-    double alpha = 0.5;                 // Damping parameter for SIMPLE-like preconditioners
-    unsigned int maxiter_inner = 10000; // Maximum iterations for inner solvers
-    double tol_inner = 1e-5;            // Tolerance for inner solvers
-    bool use_ilu = true;                // Flag: true for ILU, false for AMG
-    bool use_inner_solver = true;       // Flag: true for inner GMRES, false for inner CG
+    static constexpr double alpha = 1;                   // Damping parameter for SIMPLE-like preconditioners
+    static constexpr unsigned int maxiter_inner = 10000; // Maximum iterations for inner solvers
+    static constexpr double tol_inner = 1e-5;            // Tolerance for inner solvers
+    static constexpr bool use_ilu = false;               // Flag: true for ILU, false for AMG
 
     // Set up the outer GMRES solver.
-    SolverControl solver_control(1000000, 1e-4 * system_rhs.l2_norm());
+    SolverControl solver_control(10000, 1e-7);
     SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
 
     std::shared_ptr<BlockPrecondition> block_precondition;
@@ -407,50 +407,44 @@ void MonolithicNavierStokes<dim>::solve_time_step()
     switch (precond_type)
     {
     case 1:
-    { // BLOCK DIAGONAL preconditioner
-        auto block_diag_precondition = std::make_shared<PreconditionBlockDiagonal>();
-        block_diag_precondition->initialize(
-            system_matrix.block(0, 0), // Velocity block (F_matrix)
-            pressure_mass.block(1, 1), // Pressure block (mass matrix)
-            maxiter_inner,             // Maximum iterations for inner solves
-            tol_inner,                 // Tolerance for inner solves
-            use_ilu);
-        block_precondition = block_diag_precondition;
-        break;
-    }
-    case 2:
-    { // SIMPLE preconditioner
+    {
         auto simple_precondition = std::make_shared<PreconditionSIMPLE>();
         simple_precondition->initialize(
-            system_matrix.block(0, 0), // F_matrix
-            system_matrix.block(1, 0), // -B_matrix (bottom-left block)
-            system_matrix.block(0, 1), // B^T_matrix (top-right block)
-            solution_owned,            // Example block vector for temporary storage
-            alpha,                     // Damping parameter (alpha)
-            maxiter_inner,             // Maximum iterations for inner solves
-            tol_inner,                 // Tolerance for inner solves
-            use_ilu                    // Flag: true for ILU, false for AMG
-        );
+            system_matrix.block(0, 0),
+            system_matrix.block(1, 0),
+            system_matrix.block(0, 1),
+            solution_owned,
+            alpha,
+            maxiter_inner,
+            tol_inner,
+            use_ilu);
         block_precondition = simple_precondition;
         break;
     }
-    case 3:
-    { // ASIMPLE preconditioner
+    case 2:
+    {
         auto asimple_precondition = std::make_shared<PreconditionaSIMPLE>();
         asimple_precondition->initialize(
-            system_matrix.block(0, 0), system_matrix.block(1, 0),
-            system_matrix.block(0, 1), solution_owned, alpha,
-            use_inner_solver, maxiter_inner,
-            tol_inner, use_ilu);
+            system_matrix.block(0, 0),
+            system_matrix.block(1, 0),
+            system_matrix.block(0, 1),
+            solution_owned,
+            alpha,
+            maxiter_inner,
+            tol_inner,
+            use_ilu);
         block_precondition = asimple_precondition;
         break;
     }
-    case 4:
-    { // YOSIDA preconditioner
+    case 3:
+    {
         auto yosida_precondition = std::make_shared<PreconditionYosida>();
         yosida_precondition->initialize(
-            system_matrix.block(0, 0), system_matrix.block(1, 0),
-            system_matrix.block(0, 1), velocity_mass.block(0, 0), solution_owned,
+            system_matrix.block(0, 0),
+            system_matrix.block(1, 0),
+            system_matrix.block(0, 1),
+            velocity_mass.block(0, 0),
+            solution_owned,
             maxiter_inner,
             tol_inner,
             use_ilu);
@@ -461,7 +455,6 @@ void MonolithicNavierStokes<dim>::solve_time_step()
         Assert(false, ExcNotImplemented());
     }
 
-    // Solve the full system (velocity + pressure) using GMRES with the chosen preconditioner.
     solver.solve(system_matrix,
                  solution_owned,
                  system_rhs,
@@ -469,8 +462,9 @@ void MonolithicNavierStokes<dim>::solve_time_step()
 
     pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
 
-    // Update the ghosted solution for output or further usage.
     solution = solution_owned;
+
+    solution.update_ghost_values();
 }
 
 template <unsigned int dim>

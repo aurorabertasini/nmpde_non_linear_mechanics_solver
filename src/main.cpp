@@ -11,7 +11,7 @@
 #include <chrono>
 
 // -----------------------------------------------------------------------------
-// 1) TIME ERROR PRINTOUT (Extended for 6 error variables)
+// 1) TIME ERROR PRINTOUT 
 // -----------------------------------------------------------------------------
 void writeTimeErrorsToFile(const std::string &filename,
                            const std::vector<double> &deltat_vector,
@@ -128,7 +128,7 @@ void writeTimeErrorsToFile(const std::string &filename,
 }
 
 // -----------------------------------------------------------------------------
-// 2) SPACE ERROR PRINTOUT (Unchanged in this example)
+// 2) SPACE ERROR PRINTOUT 
 // -----------------------------------------------------------------------------
 void writeSpaceErrorsToFile(const std::string &filename,
                             const std::vector<double> &mesh_sizes,
@@ -182,6 +182,56 @@ void writeSpaceErrorsToFile(const std::string &filename,
     outFile.close();
 }
 
+void writeSpaceErrorsForSteadyToFile(const std::string &filename,
+                                     const std::vector<double> &mesh_sizes,
+                                     const std::vector<double> &errors_vL2,
+                                     const std::vector<double> &errors_vH1)
+{
+    std::ofstream outFile(filename);
+    if (!outFile)
+    {
+        std::cerr << "Error: Unable to open file " << filename << " for writing." << std::endl;
+        return;
+    }
+
+    for (size_t i = 0; i < mesh_sizes.size(); ++i)
+    {
+        // Mesh size
+        outFile << std::scientific << "h = " << std::setw(8)
+                << std::setprecision(4) << mesh_sizes[i];
+
+        // Velocity L2 error
+        outFile << " | vL2 = " << errors_vL2[i];
+        if (i > 0)
+        {
+            double p = std::log(errors_vL2[i] / errors_vL2[i - 1]) /
+                       std::log(mesh_sizes[i] / mesh_sizes[i - 1]);
+            outFile << " (" << std::fixed << std::setprecision(2) << p << ")";
+        }
+        else
+        {
+            outFile << " (  - )";
+        }
+
+        // Velocity H1 error
+        outFile << " | vH1 = " << errors_vH1[i];
+        if (i > 0)
+        {
+            double p = std::log(errors_vH1[i] / errors_vH1[i - 1]) /
+                       std::log(mesh_sizes[i] / mesh_sizes[i - 1]);
+            outFile << " (" << std::fixed << std::setprecision(2) << p << ")";
+        }
+        else
+        {
+            outFile << " (  - )";
+        }
+
+        outFile << "\n";
+    }
+
+    outFile.close();
+}
+
 // -----------------------------------------------------------------------------
 // MAIN
 // -----------------------------------------------------------------------------
@@ -208,9 +258,8 @@ int main(int argc, char *argv[])
     {
         std::cout << "Please choose the problem to solve:\n"
                   << "(1) Time Convergence test ChorinTemam (2D)\n"
-                  << "(2) Time Convergence test Monolithic (3D)\n"
-                  << "(3) Space Convergence test Monolithic (3D)\n"
-                  << "(4) Space Convergence test SteadyNavierStokes (2D)\n\n"
+                  << "(2) Space Convergence test Monolithic (3D)\n"
+                  << "(3) Space Convergence test SteadyNavierStokes (2D)\n\n"
                   << "Enter your choice: ";
 
         while (choice < 1 || choice > 4)
@@ -326,100 +375,11 @@ int main(int argc, char *argv[])
         }
         break;
     }
+    
     // -------------------------------------------------------------------------
-    // CASE 2: Time Convergence test Monolithic (3D)
+    // CASE 2: Space Convergence test Monolithic (3D)
     // -------------------------------------------------------------------------
     case 2:
-    {
-        //     // Append (or overwrite) CSV
-        //     std::ofstream out_file("time_convergence_analysis_monolithic.csv", std::ios::app);
-        //     if (mpi_rank == 0)
-        //     {
-        //         out_file << "delta_t,"
-        //                  << "pLinf,"
-        //                  << "vL2,"
-        //                  << "vH1,"
-        //                  << "vLinfinityH1,"
-        //                  << "pLinfinityL2,"
-        //                  << "vLinfinityL2\n";
-        //     }
-
-        //     // Vectors for EOC
-        //     std::vector<double> deltat_vector;
-        //     std::vector<double> errors_pLinf;
-        //     std::vector<double> errors_vL2;
-        //     std::vector<double> errors_vH1;
-        //     std::vector<double> errors_vLinfinityH1;
-        //     std::vector<double> errors_pLinfinityL2;
-        //     std::vector<double> errors_vLinfinityL2;
-
-        //     double deltat_start = 0.1;
-        //     double deltat = deltat_start;
-        //     int number_of_delta_t_refinements = 5;
-        //     int count = 0;
-        //     do
-        //     {
-        //         deltat_vector.push_back(deltat);
-
-        //         MonolithicNavierStokes<3> monolithicNavierStokes(
-        //             mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, deltat);
-
-        //         monolithicNavierStokes.setup();
-        //         monolithicNavierStokes.solve();
-
-        //         // Retrieve errors (assuming your class provides these methods)
-        //         double pLinf             = monolithicNavierStokes.compute_error(VectorTools::Linfty_norm, /*velocity=*/false);
-        //         double vL2               = monolithicNavierStokes.compute_error(VectorTools::L2_norm,    /*velocity=*/true);
-        //         double vH1               = monolithicNavierStokes.get_l2_H1_error();
-        //         double vLinfinityH1      = monolithicNavierStokes.get_linfinity_H1_error_velocity();
-        //         double pLinfinityL2      = monolithicNavierStokes.get_linfinity_L2_error_pressure();
-        //         double vLinfinityL2      = monolithicNavierStokes.get_linfinity_L2_error_velocity();
-
-        //         if (mpi_rank == 0)
-        //         {
-        //             // Store in vectors
-        //             errors_pLinf.push_back(pLinf);
-        //             errors_vL2.push_back(vL2);
-        //             errors_vH1.push_back(vH1);
-        //             errors_vLinfinityH1.push_back(vLinfinityH1);
-        //             errors_pLinfinityL2.push_back(pLinfinityL2);
-        //             errors_vLinfinityL2.push_back(vLinfinityL2);
-
-        //             // Output CSV
-        //             out_file << deltat << ","
-        //                      << pLinf << ","
-        //                      << vL2 << ","
-        //                      << vH1 << ","
-        //                      << vLinfinityH1 << ","
-        //                      << pLinfinityL2 << ","
-        //                      << vLinfinityL2 << "\n";
-        //         }
-
-        //         deltat /= 2.0;
-        //         count++;
-        //     } while (count < number_of_delta_t_refinements);
-
-        //     out_file.close();
-
-        //     // Write extended time convergence results (with EOC) to TXT
-        //     if (mpi_rank == 0)
-        //     {
-        //         writeTimeErrorsToFile(
-        //             "time_convergence_analysis_monolithic_" + std::to_string(simulationPeriod) + ".txt",
-        //             deltat_vector,
-        //             errors_pLinf,
-        //             errors_vL2,
-        //             errors_vH1,
-        //             errors_vLinfinityH1,
-        //             errors_pLinfinityL2,
-        //             errors_vLinfinityL2);
-        //     }
-        //     break;
-    }
-    // -------------------------------------------------------------------------
-    // CASE 3: Space Convergence test Monolithic (3D)
-    // -------------------------------------------------------------------------
-    case 3:
     {
         // Different mesh files with known characteristic size h:
         std::vector<std::string> meshFiles = {
@@ -482,25 +442,26 @@ int main(int argc, char *argv[])
         }
         break;
     }
+
     // -------------------------------------------------------------------------
-    // CASE 4: Space Convergence test SteadyNavierStokes (2D)
+    // CASE 3: Space Convergence test SteadyNavierStokes (2D)
+    //         
     // -------------------------------------------------------------------------
-    case 4:
+    case 3:
     {
         // Example 2D meshes
-        std::vector<std::string> meshFiles = {
-            "../mesh/squareBenchmark2D_1000.msh",
-            "../mesh/squareBenchmark2D_500.msh",
-            "../mesh/squareBenchmark2D_250.msh"
-            // "../mesh/squareBenchmark2D_125.msh" // Add more if needed
+        std::vector<std::string> meshFiles = 
+        {
+            "../mesh/Square2D_1.msh",
+            "../mesh/Square2D_2.msh",
+            "../mesh/Square2D_3.msh"
         };
         // Hypothetical characteristic mesh sizes
-        std::vector<double> mesh_sizes = {0.5, 0.25, 0.125};
+        std::vector<double> mesh_sizes = {0.1, 0.05, 0.025};
 
-        // For demonstration, let's store dummy pressure errors (if needed)
-        // and real velocity H1 errors.
-        std::vector<double> errors_Linf_pressure;
-        std::vector<double> errors_H1_velocity;
+        // Vectors to store velocity errors for each mesh
+        std::vector<double> errors_vL2;
+        std::vector<double> errors_vH1;
 
         // We also open a CSV for quick reference
         std::ofstream out_file("space_convergence_analysis_steady_navier_stokes_2D.csv", std::ios::app);
@@ -521,12 +482,9 @@ int main(int argc, char *argv[])
             // This function presumably solves the problem and fills the references
             steadyNavierStokes.run_full_problem_pipeline(velocity_L2_error, velocity_H1_error);
 
-            // For now, if you do not compute pressure errors in your steady solver,
-            // you can push_back a dummy zero or skip altogether
-            double dummy_pressure_error = 0.0;
-
-            errors_Linf_pressure.push_back(dummy_pressure_error);
-            errors_H1_velocity.push_back(velocity_H1_error);
+            // Collect the computed velocity errors
+            errors_vL2.push_back(velocity_L2_error);
+            errors_vH1.push_back(velocity_H1_error);
 
             if (mpi_rank == 0)
             {
@@ -536,17 +494,19 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Optionally write to a space-convergence file with EOC.
-        // For the pressure error, we are just using dummy zeros for demonstration.
+        // Write space convergence results (with EOC) using velocity L2 and velocity H1 errors
         if (mpi_rank == 0)
         {
-            writeSpaceErrorsToFile("space_convergence_analysis_steady_navier_stokes_2D.txt",
-                                   mesh_sizes,
-                                   errors_Linf_pressure,
-                                   errors_H1_velocity);
+            writeSpaceErrorsForSteadyToFile("space_convergence_analysis_steady_navier_stokes_2D.txt",
+                                            mesh_sizes,
+                                            errors_vL2,
+                                            errors_vH1);
         }
         break;
     }
+
+    default:
+        break;
     }
 
     // -------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 // Define characteristic length
-h = 0.0125;  // Modify this value as needed
+h = 0.1;  // Modify this value as needed
 
 // Define corner points
 Point(1) = {0, 0, 0, h};
@@ -8,10 +8,10 @@ Point(3) = {1, 1, 0, h};
 Point(4) = {0, 1, 0, h};
 
 // Define lines with indices
-Line(0) = {1, 2};  // Bottom boundary
-Line(1) = {2, 3};  // Right boundary
-Line(2) = {3, 4};  // Top boundary
-Line(3) = {4, 1};  // Left boundary
+Line(0) = {4, 1};  // Left boundary
+Line(1) = {1, 2};  // Bottom boundary
+Line(2) = {2, 3};  // Right boundary
+Line(3) = {3, 4};  // Top boundary
 
 // Define surface
 Line Loop(10) = {0, 1, 2, 3};
