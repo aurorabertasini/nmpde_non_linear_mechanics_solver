@@ -274,7 +274,7 @@ void MonolithicNavierStokes<dim>::add_convective_term()
 
     // lhs_matrix = 0.0;
 
-    lhs_matrix = system_matrix;
+    lhs_matrix.copy_from(system_matrix);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
     {
@@ -458,7 +458,7 @@ void MonolithicNavierStokes<dim>::solve_time_step()
 {
     // Choose the preconditioner type:
     // 1 = SIMPLE, 2 = ASIMPLE, 3 = YOSIDA, 4 = AYOSIDA.
-    int precond_type = 2; // Set this value as needed
+    int precond_type = 1; // Set this value as needed
 
     // Local parameters for inner solvers and preconditioner initialization.
     double alpha = 1;                   // Damping parameter for SIMPLE-like preconditioners
