@@ -191,23 +191,7 @@ public:
   // Problem Customization Functions
   // -----------------------------------------------------------
 
-  // Forcing Term
-  /*
-  *  A forcing term that is zero everywhere for flow past cylinder test case
-  */
-  class ForcingTerm : public Function<dim>
-  {
-  public:
-    void vector_value(const Point<dim> &, Vector<double> &values) const override
-    {
-      for (unsigned int i = 0; i < dim; ++i)
-        values[i] = 0.0;
-    }
-    double value(const Point<dim> &, const unsigned int = 0) const override
-    {
-      return 0.0;
-    }
-  };
+
 
   // Inlet Velocity
   /*
@@ -283,8 +267,8 @@ protected:
   double deltaP;
 
   // Problem-specific objects
-  ForcingTerm   forcing_term;               // Forcing term
-  InletVelocity inlet_velocity;             // Inlet velocity
+  Functions::ZeroFunction<dim> forcing_term;    // Zero forcing term - fixed by problem
+  InletVelocity inlet_velocity;                 // Inlet velocity
 
   // MPI tools
   const unsigned int mpi_size;              // Number of MPI processes
@@ -414,7 +398,7 @@ public:
   /**
    *  Compute lift, drag and DeltaP post processing function
    */
-  void compute_lift_drag(double& lift, double& drag, double& delta_P);
+  void compute_lift_drag();
 
 protected:
   unsigned int       iter       = 0;      // Newton iterations counter

@@ -38,7 +38,7 @@ void SteadyNavierStokes<dim>::run_full_problem_pipeline()
   non_linear_correction.output();
 
   // 7) Compute lift, drag and pressure difference
-  non_linear_correction.compute_lift_drag(lift, drag, deltaP);
+  non_linear_correction.compute_lift_drag();
 }
 
 template <int dim>
@@ -767,7 +767,7 @@ void NonLinearCorrection<dim>::solve()
     this->assemble();
     double update_norm = tolerance + 1.0; // Initialize to a value greater than update_tol
     
-    SolverControl solver_control(2'000'000, 1e-9);
+    SolverControl solver_control(2'000'000, 1e-6);
     SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
 
     // Very simple preconditioner: Identity
@@ -863,7 +863,7 @@ void NonLinearCorrection<dim>::output()
 
 
 template <int dim>
-void NonLinearCorrection<dim>::compute_lift_drag(double& lift, double& drag, double& DeltaP)
+void NonLinearCorrection<dim>::compute_lift_drag()
 {
     // Define quadrature for faces
     QGauss<dim - 1> face_quadrature_formula(3);
@@ -958,7 +958,6 @@ void NonLinearCorrection<dim>::compute_lift_drag(double& lift, double& drag, dou
     MPI_Reduce(&local_drag, &total_drag, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
     // Define points of interest for pressure difference
-    std::vector<Point<dim>> points_of_interest;
     if constexpr (dim == 2)
     {
         points_of_interest.emplace_back(0.15, 0.20);
@@ -1043,9 +1042,9 @@ void NonLinearCorrection<dim>::compute_lift_drag(double& lift, double& drag, dou
     }
 
     // Assign results to output variables
-    lift = total_lift;
-    drag = total_drag;
-    DeltaP = global_pres_point1 - global_pres_point2;
+    this->lift = total_lift;
+    this->drag = total_drag;
+    this->deltaP = global_pres_point1 - global_pres_point2;
 
     // Ensure all processes have completed the reductions
     MPI_Barrier(MPI_COMM_WORLD);
@@ -1083,9 +1082,9 @@ std::string NonLinearCorrection<dim>::get_output_directory()
 }
 
 
-// ===============================
+// ---------------------------------
 // Explicit Instantiations
-// ===============================
+// ---------------------------------
 
 // 2D and 3D cases
 template class SteadyNavierStokes<2>;
