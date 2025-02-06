@@ -46,7 +46,6 @@ void SteadyNavierStokes<dim>::setup()
 {
   this->pcout << "Initializing the mesh" << std::endl;
 
-  // Use a serial Triangulation to read the mesh from file .msh
   Triangulation<dim> mesh_serial;
   {
     GridIn<dim> grid_in;
@@ -56,14 +55,11 @@ void SteadyNavierStokes<dim>::setup()
     AssertThrow(grid_in_file,
                 ExcMessage("Could not open mesh file '" + this->mesh_file_name + "'"));
 
-    // Read the .msh file into the serial Triangulation
     grid_in.read_msh(grid_in_file);
   }
 
-  // Partition the mesh among MPI processes
   GridTools::partition_triangulation(this->mpi_size, mesh_serial);
 
-  // Create a parallel-ready triangulation description from the given serial mesh.
   const auto construction_data =
     TriangulationDescription::Utilities::create_description_from_triangulation(
       mesh_serial, MPI_COMM_WORLD);
@@ -106,13 +102,10 @@ std::string SteadyNavierStokes<dim>::get_output_directory() const
 template <int dim>
 void Stokes<dim>::setup()
 {
-  // First, call the base setup() to read/distribute the mesh:
   SteadyNavierStokes<dim>::setup();
 
-  // Now proceed with the "Stokes" specifics:
   this->pcout << "Initializing the finite element space" << std::endl;
 
-  //  Initialize the finite element space 
   const FE_SimplexP<dim> fe_scalar_velocity(this->degree_velocity);
   const FE_SimplexP<dim> fe_scalar_pressure(this->degree_pressure);
 
@@ -126,7 +119,6 @@ void Stokes<dim>::setup()
   this->pcout << "  DoFs per cell              = "
               << this->fe->dofs_per_cell << std::endl;
 
-  // Initialize the quadrature 
   this->quadrature = std::make_unique<QGaussSimplex<dim>>(this->fe->degree + 1);
   this->pcout << "  Quadrature points per cell = "
               << this->quadrature->size() << std::endl;
@@ -138,22 +130,18 @@ void Stokes<dim>::setup()
 
   this->pcout << "-----------------------------------------------" << std::endl;
 
-  // Initialize the DoF handler
   this->pcout << "Initializing the DoF handler" << std::endl;
   this->dof_handler.reinit(this->mesh);
   this->dof_handler.distribute_dofs(*this->fe);
 
-  // Reorder velocity DoFs first, then pressure DoFs
   std::vector<unsigned int> block_component(dim + 1, 0);
-  block_component[dim] = 1; // pressure is component "dim"
+  block_component[dim] = 1; 
   DoFRenumbering::component_wise(this->dof_handler, block_component);
 
-  // Owned + relevant DoFs
   this->locally_owned_dofs = this->dof_handler.locally_owned_dofs();
   DoFTools::extract_locally_relevant_dofs(this->dof_handler,
                                           this->locally_relevant_dofs);
 
-  // Count how many DoFs are velocity vs. pressure
   const std::vector<types::global_dof_index> dofs_per_block =
     DoFTools::count_dofs_per_fe_block(this->dof_handler, block_component);
   const unsigned int n_u = dofs_per_block[0];
@@ -173,17 +161,14 @@ void Stokes<dim>::setup()
 
   this->pcout << "-----------------------------------------------" << std::endl;
 
-  // Initialize the linear system
   {
     this->pcout << "Initializing the linear system" << std::endl;
     this->pcout << "  Initializing the sparsity pattern" << std::endl;
 
-    // Make the system matrix sparsity
     Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
     for (unsigned int c = 0; c < dim + 1; ++c)
       for (unsigned int d = 0; d < dim + 1; ++d)
       {
-        // For the system matrix, everything except p-p block is "always"
         if (c == dim && d == dim)
           coupling[c][d] = DoFTools::none;
         else
@@ -197,7 +182,6 @@ void Stokes<dim>::setup()
                                     sparsity);
     sparsity.compress();
 
-    // Sparsity pattern for the pressure mass matrix (only p-p block)
     for (unsigned int c = 0; c < dim + 1; ++c)
       for (unsigned int d = 0; d < dim + 1; ++d)
       {
@@ -272,7 +256,6 @@ void Stokes<dim>::assemble()
 
     for (unsigned int q = 0; q < n_q; ++q)
     {
-      // Forcing term expressed as a Tensor 
       Vector<double> forcing_loc(dim);
       this->forcing_term.vector_value(fe_values.quadrature_point(q), forcing_loc);
       Tensor<1, dim> forcing_tensor;
@@ -408,7 +391,6 @@ void Stokes<dim>::solve()
   this->pcout << "  " << solver_control.last_step() << " GMRES iterations"
               << std::endl;
 
-  // Distribute to the fully relevant solution
   this->solution = this->solution_owned;
 }
 
@@ -465,19 +447,15 @@ std::string Stokes<dim>::get_output_directory() const
 {
     namespace fs = std::filesystem;
 
-    // 1) Ensure top-level "outputs/" exists
     if (!fs::exists("outputs"))
         fs::create_directory("outputs");
 
-    // 2) Create a subdirectory specific to "SteadyNavierStokes"
     if (!fs::exists("outputs/SteadyNavierStokes"))
         fs::create_directory("outputs/SteadyNavierStokes");
 
-    // 3) Create a subdirectory specific to "Stokes"
     if (!fs::exists("outputs/SteadyNavierStokes/Stokes"))
         fs::create_directory("outputs/SteadyNavierStokes/Stokes");
 
-    // 4) Further subdivide by Reynolds number (or any relevant parameter)
     const std::string sub_dir_name =
         "outputs_reynolds_" + std::to_string(static_cast<int>(this->Re));
 
@@ -487,7 +465,6 @@ std::string Stokes<dim>::get_output_directory() const
     if (!fs::exists(sub_dir_path))
         fs::create_directory(sub_dir_path);
 
-    // Return the absolute string path to the new directory
     return sub_dir_path.string();
 }
 
@@ -559,7 +536,6 @@ void NonLinearCorrection<dim>::setup()
   // Initialize constraints
   {
     constraints.clear();
-    // Define boundary conditions based on dimension
     std::map<types::boundary_id, const Function<dim> *> boundary_functions;
     Functions::ZeroFunction<dim> zero_function(dim + 1);
 
@@ -570,7 +546,6 @@ void NonLinearCorrection<dim>::setup()
 
     if constexpr (dim == 2)
     {
-      // Interpolate boundary values into constraints (only velocity components)
       VectorTools::interpolate_boundary_values(this->dof_handler,
                                              boundary_functions,
                                              constraints,
@@ -578,7 +553,6 @@ void NonLinearCorrection<dim>::setup()
     }
     else if constexpr (dim == 3)
     {
-      // Interpolate boundary values into constraints (only velocity components)
       VectorTools::interpolate_boundary_values(this->dof_handler,
                                              boundary_functions,
                                              constraints,
@@ -588,14 +562,13 @@ void NonLinearCorrection<dim>::setup()
     constraints.close();
   }
 
-  // Initialize system
   this->pcout << "Initializing the linear system" << std::endl;
   this->pcout << "Initializing the sparsity pattern" << std::endl;
 
   Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
   for (unsigned int c = 0; c < dim + 1; ++c)
     for (unsigned int d = 0; d < dim + 1; ++d)
-      coupling[c][d] = DoFTools::always; // we assume all couplings
+      coupling[c][d] = DoFTools::always; 
 
   TrilinosWrappers::BlockSparsityPattern sparsity(this->block_owned_dofs,
                                                   MPI_COMM_WORLD);
@@ -606,7 +579,6 @@ void NonLinearCorrection<dim>::setup()
                                   false);
   sparsity.compress();
 
-  // Pressure mass matrix pattern (only p-p block)
   for (unsigned int c = 0; c < dim + 1; ++c)
     for (unsigned int d = 0; d < dim + 1; ++d)
     {
@@ -652,16 +624,13 @@ void NonLinearCorrection<dim>::assemble()
   FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double>     local_rhs(dofs_per_cell);
 
-  // Reinit system
   this->system_matrix = 0.0;
   this->system_rhs    = 0.0;
 
-  // Temporary arrays for old solution evaluations
   std::vector<Tensor<1, dim>> previous_velocity_values(n_q);
   std::vector<Tensor<2, dim>> previous_velocity_gradients(n_q);
   std::vector<double>         previous_pressure_values(n_q);
 
-  // Predefine shape function evaluations
   std::vector<double>         div_phi_u(dofs_per_cell);
   std::vector<Tensor<1, dim>> phi_u(dofs_per_cell);
   std::vector<Tensor<2, dim>> grad_phi_u(dofs_per_cell);
@@ -677,7 +646,6 @@ void NonLinearCorrection<dim>::assemble()
     local_matrix = 0.0;
     local_rhs    = 0.0;
 
-    // Evaluate old solution at quadrature points
     fe_values[u_k].get_function_values(this->solution_old, previous_velocity_values);
     fe_values[u_k].get_function_gradients(this->solution_old, previous_velocity_gradients);
     fe_values[p_k].get_function_values(this->solution_old, previous_pressure_values);
@@ -692,7 +660,6 @@ void NonLinearCorrection<dim>::assemble()
         phi_p[k]      = fe_values[p_k].value(k, q);
       }
 
-      // Build local contributions
       for (unsigned int i = 0; i < dofs_per_cell; ++i)
       {
         for (unsigned int j = 0; j < dofs_per_cell; ++j)
@@ -722,7 +689,6 @@ void NonLinearCorrection<dim>::assemble()
       }
     }
 
-     // Neumann boundary condition for p_out on boundary_id = 1 
         if (cell->at_boundary())
         {
             for (unsigned int f = 0; f < cell->n_faces(); ++f)
@@ -763,30 +729,26 @@ void NonLinearCorrection<dim>::solve()
 {
   for (iter = 0; iter < maxIter; ++iter)
   {
-    // Each iteration re-assembles with the updated solution
     this->assemble();
-    double update_norm = tolerance + 1.0; // Initialize to a value greater than update_tol
+    double update_norm = tolerance + 1.0; 
     
     SolverControl solver_control(2'000'000, 1e-6);
     SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
 
-    // Very simple preconditioner: Identity
     typename SteadyNavierStokes<dim>::PreconditionIdentity preconditioner;
-    constraints.set_zero(this->solution_owned); // Set the inhomogeneous constrained components to 0
+    constraints.set_zero(this->solution_owned); 
 
     solver.solve(this->system_matrix,
                   this->solution_owned,
                   this->system_rhs,
                   preconditioner);
 
-    constraints.distribute(this->solution_owned);  // Recover the constrained components
-
+    constraints.distribute(this->solution_owned);  
     this->pcout << "  " << solver_control.last_step()
                 << " GMRES iterations" << std::endl;
 
     this->solution = this->solution_owned;
 
-    // Evaluate update = (solution - solution_old)
     this->new_res.reinit(this->solution);
     this->new_res = this->solution;
     this->new_res.sadd(1.0, -1.0, this->solution_old);
@@ -810,7 +772,7 @@ void NonLinearCorrection<dim>::solve()
     if (this->mpi_rank == 0)
       std::cout << "Iteration " << iter << " completed." << std::endl;
 
-    if (residual < tolerance) // Convergence check
+    if (residual < tolerance) 
       break;
   }
   if (iter == maxIter)
@@ -840,7 +802,6 @@ void NonLinearCorrection<dim>::output()
                            names,
                            data_component_interpretation);
 
-  // Partition info
   std::vector<unsigned int> partition_int(this->mesh.n_active_cells());
   GridTools::get_subdomain_association(this->mesh, partition_int);
   const Vector<double> partitioning(partition_int.begin(), partition_int.end());

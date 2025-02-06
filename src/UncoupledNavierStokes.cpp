@@ -3,8 +3,7 @@
 template <unsigned int dim>
 void UncoupledNavierStokes<dim>::setup()
 {
-    if (mpi_rank == 0)
-        std::cout << "Initializing the mesh" << std::endl;
+    pcout << "Initializing the mesh" << std::endl;
 
     Triangulation<dim> mesh_serial;
 
@@ -19,12 +18,8 @@ void UncoupledNavierStokes<dim>::setup()
         create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
     mesh.create_triangulation(construction_data);
 
-    if (mpi_rank == 0)
-        std::cout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
-
-    //-----------------------------
-    // Velocity dofs
-    //-----------------------------
+    pcout << "-----------------------------------------------" << std::endl;
+    pcout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
 
     dof_handler_velocity.reinit(mesh);
     dof_handler_velocity.distribute_dofs(fe_velocity);
@@ -40,13 +35,11 @@ void UncoupledNavierStokes<dim>::setup()
                                              InletVelocity(H),
                                              constraints_velocity);
 
-    // Zero velocity (homogeneous Dirichlet) on boundary ID = 3:
     VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                              /*boundary_id=*/2,
                                              Functions::ZeroFunction<dim>(dim),
                                              constraints_velocity);
 
-    // Zero velocity (homogeneous Dirichlet) on boundary ID = 4:
     VectorTools::interpolate_boundary_values(dof_handler_velocity,
                                              /*boundary_id=*/3,
                                              Functions::ZeroFunction<dim>(dim),
@@ -66,39 +59,28 @@ void UncoupledNavierStokes<dim>::setup()
     constraints_pressure.reinit(locally_relevant_pressure);
     DoFTools::make_hanging_node_constraints(dof_handler_pressure, constraints_pressure);
 
+    // Homogeneus dirichlet boundary conditions for the pressure since there is neumann on the velocity
     VectorTools::interpolate_boundary_values(
         dof_handler_pressure,
         1,
-        Functions::ZeroFunction<dim>(1), // pressure is scalar => "1" component
+        Functions::ZeroFunction<dim>(1), 
         constraints_pressure);
-
     constraints_pressure.close();
 
-    //-----------------------------
-    // Sparsity patterns
-    //-----------------------------
+    TrilinosWrappers::SparsityPattern dsp_v(locally_owned_velocity,
+                                            MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler_velocity, dsp_v);
+    dsp_v.compress();
 
-    {
-        TrilinosWrappers::SparsityPattern dsp_v(locally_owned_velocity,
-                                                MPI_COMM_WORLD);
-        DoFTools::make_sparsity_pattern(dof_handler_velocity, dsp_v);
-        dsp_v.compress();
+    velocity_matrix.reinit(dsp_v);
+    velocity_update_matrix.reinit(dsp_v);
 
-        velocity_matrix.reinit(dsp_v);
-        velocity_update_matrix.reinit(dsp_v);
-    }
-    {
-        TrilinosWrappers::SparsityPattern dsp_p(locally_owned_pressure,
-                                                MPI_COMM_WORLD);
-        DoFTools::make_sparsity_pattern(dof_handler_pressure, dsp_p);
-        dsp_p.compress();
+    TrilinosWrappers::SparsityPattern dsp_p(locally_owned_pressure,
+                                            MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler_pressure, dsp_p);
+    dsp_p.compress();
 
-        pressure_matrix.reinit(dsp_p);
-    }
-
-    //-----------------------------
-    // Reinit all vectors
-    //-----------------------------
+    pressure_matrix.reinit(dsp_p);
 
     old_velocity.reinit(locally_owned_velocity, locally_relevant_velocity, MPI_COMM_WORLD);
     old_old_velocity.reinit(locally_owned_velocity, locally_relevant_velocity, MPI_COMM_WORLD);
@@ -112,9 +94,11 @@ void UncoupledNavierStokes<dim>::setup()
     pressure_solution.reinit(locally_owned_pressure, locally_relevant_pressure, MPI_COMM_WORLD);
     pressure_system_rhs.reinit(locally_owned_pressure, MPI_COMM_WORLD);
 
-    if (mpi_rank == 0)
-        std::cout << "DoFs: velocity=" << dof_handler_velocity.n_dofs()
-                  << ", pressure=" << dof_handler_pressure.n_dofs() << std::endl;
+    pcout << "  Number of DoFs: " << std::endl;
+    pcout << "    velocity = " << dof_handler_velocity.n_dofs() << std::endl;
+    pcout << "    pressure = " << dof_handler_pressure.n_dofs() << std::endl;
+    pcout << "    total    = " << dof_handler_velocity.n_dofs() + dof_handler_pressure.n_dofs() << std::endl;
+    pcout << "-----------------------------------------------" << std::endl;
 }
 
 template <unsigned int dim>
@@ -173,35 +157,50 @@ void UncoupledNavierStokes<dim>::assemble_system_velocity()
 
         for (unsigned int q = 0; q < n_q; ++q)
         {
-            const double JxW = fe_values.JxW(q);
-
-            const Tensor<1, dim> &u_star = 2.0 * old_val[q] - old_old_val[q];
-            // const double u_star_div = 2.0 * old_div[q] - old_old_div[q];
+            // ------
+            // u* = 2*u^n - u^{n-1}
+            // ------
+            const Tensor<1, dim> &u_star = 2.0 * old_val[q] - old_old_val[q]; 
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
-                const Tensor<1, dim> &phi_i = vel_extract.value(i, q);
-                const Tensor<2, dim> &grad_phi_i = vel_extract.gradient(i, q);
 
                 for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                    const Tensor<1, dim> &phi_j = vel_extract.value(j, q);
-                    const Tensor<2, dim> &grad_phi_j = vel_extract.gradient(j, q);
-
                     double lhs = 0.0;
-                    // Mass
-                    lhs += 3.0 * scalar_product(phi_j, phi_i);
+                    
+                    // Mass Term
+                    // ------
+                    // M_ij = (3/2) * (1/Δt) ∫ φ_i·φ_j dx
+                    // ------
+                    lhs += (3.0/2.0) * (1./deltat) * scalar_product(vel_extract.value(j, q), vel_extract.value(i, q));
+                    
                     // Viscous
-                    lhs += 2.0 * deltat * nu * scalar_product(grad_phi_j, grad_phi_i);
+                    // ------
+                    // A_ij = ∫ ν ∇φ_i:∇φ_j dx
+                    // ------
+                    lhs += nu * scalar_product(vel_extract.gradient(j, q), vel_extract.gradient(i, q));
+                    
                     // Convection
-                    lhs += 2.0 * deltat * (scalar_product(grad_phi_j * u_star, phi_i)); // dealii non condivide (o quasi)
+                    // ------
+                    // N_ij(u*) = ∫ (u* φ_j)·φ_i dx
+                    // ------
+                    lhs += (scalar_product(vel_extract.gradient(j, q) * u_star, vel_extract.value(i, q))); 
 
-                    cell_matrix(i, j) += lhs * JxW;
+                    cell_matrix(i, j) += lhs * fe_values.JxW(q);
                 }
 
-                cell_rhs(i) += scalar_product(4.0 * old_val[q], phi_i) * JxW;
-                cell_rhs(i) -= scalar_product(old_old_val[q], phi_i) * JxW;
-                cell_rhs(i) -= 2.0 * deltat * scalar_product(pressure_grad[q], phi_i) * JxW;
+                // Time dependent term
+                // ------
+                // ∫ (1/2Δt)(4u^n·φ_i- u^{n-1}·φ_i) dx
+                // ------
+                cell_rhs(i) += (1.0/(2*deltat)) * scalar_product(4.0 * old_val[q], vel_extract.value(i, q)) * fe_values.JxW(q);
+                cell_rhs(i) -= (1.0/(2*deltat)) * scalar_product(old_old_val[q], vel_extract.value(i, q)) * fe_values.JxW(q);
+                
+                // Pressure term
+                // ------
+                // - ∫ φ_j·∇p dx
+                cell_rhs(i) -= scalar_product(pressure_grad[q], vel_extract.value(i, q)) * fe_values.JxW(q);
             }
         }
         cell_v->get_dof_indices(local_indices);
@@ -271,14 +270,12 @@ void UncoupledNavierStokes<dim>::assemble_system_pressure()
 
     const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
     const unsigned int n_q = quad.size();
-    // const unsigned int n_q_face = fe_face_values.n_quadrature_points;
 
     FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
     Vector<double> cell_rhs(dofs_per_cell);
     std::vector<types::global_dof_index> local_indices(dofs_per_cell);
 
-    // We'll read velocity_solution for its divergence
-    std::vector<double> div_u_star(n_q);
+    std::vector<double> div_u_tilde(n_q);
 
     auto cell_p = dof_handler_pressure.begin_active();
     auto cell_v = dof_handler_velocity.begin_active();
@@ -295,25 +292,29 @@ void UncoupledNavierStokes<dim>::assemble_system_pressure()
         cell_rhs = 0;
 
         const auto &vel_extract = fe_values_v[FEValuesExtractors::Vector(0)];
-        vel_extract.get_function_divergences(velocity_solution, div_u_star);
+        vel_extract.get_function_divergences(velocity_solution, div_u_tilde);
 
         for (unsigned int q = 0; q < n_q; ++q)
         {
             const double JxW = fe_values_p.JxW(q);
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
-                const double phi_i = fe_values_p.shape_value(i, q);
-                const Tensor<1, dim> grad_i = fe_values_p.shape_grad(i, q);
 
                 for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                    const Tensor<1, dim> grad_j = fe_values_p.shape_grad(j, q);
-                    cell_matrix(i, j) += scalar_product(grad_j, grad_i) * JxW;
+                    // LSH
+                    // ------
+                    // L_ij = ∫ ∇ψ_i·∇ψ_j dx
+                    // ------
+                    cell_matrix(i, j) += scalar_product(fe_values_p.shape_grad(j, q), fe_values_p.shape_grad(i, q)) * JxW;
                 }
-                // RHS = - 1/dt * div(u^*) * phi_i
-                cell_rhs(i) -= 3.0 / (2.0 * deltat) * (div_u_star[q] * phi_i) * JxW;
+                
+                // RHS
+                // ------
+                // - (3/2) * (1/Δt) ∫ div(u~)ψ_i dx
+                cell_rhs(i) -= 3.0 / (2.0 * deltat) * (div_u_tilde[q] * fe_values_p.shape_value(i, q)) * JxW;
             }
-        } // We might also add boundary integrals if needed for outflow, etc.
+        }
 
         cell_p->get_dof_indices(local_indices);
         constraints_pressure.distribute_local_to_global(cell_matrix, cell_rhs,
@@ -404,15 +405,20 @@ void UncoupledNavierStokes<dim>::update_velocity()
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
-                const Tensor<1, dim> &phi_i = vel_extract.value(i, q);
 
                 for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                    const Tensor<1, dim> &phi_j = vel_extract.value(j, q);
-                    cell_matrix(i, j) += scalar_product(phi_i, phi_j) * JxW;
+                    // ------
+                    // L_ij = ∫ φ_i·φ_j dx
+                    // ------
+                    cell_matrix(i, j) += scalar_product(vel_extract.value(i, q), vel_extract.value(j, q)) * JxW;
                 }
-                cell_rhs(i) += u_tilde_vals[q] * phi_i * JxW;
-                cell_rhs(i) -= (2.0 / 3.0) * deltat * grad_delta_p[q] * phi_i * JxW;
+                // RHS
+                // ------
+                // ∫ u~·φ_i dx - (2/3) Δt ∫ ∇δp·φ_i dx
+                // ------
+                cell_rhs(i) += u_tilde_vals[q] * vel_extract.value(i, q) * JxW;
+                cell_rhs(i) -= (2.0 / 3.0) * deltat * grad_delta_p[q] * vel_extract.value(i, q) * JxW;
             }
         }
 
@@ -486,9 +492,7 @@ void UncoupledNavierStokes<dim>::output_results()
     numProcessors += (this->mpi_size == 1) ? "_processor" : "_processors";
     std::string output_dir = get_output_directory();
 
-    // Usa un tempo formattato con padding (es. 000, 001, ..., 010)
     std::ostringstream fname;
-    // fname << output_dir.c_str();
     fname << "solution-0_";
 
     std::ofstream out(fname.str());
@@ -549,26 +553,16 @@ void UncoupledNavierStokes<dim>::run()
         update_velocity();
         solve_update_velocity_system();
 
+        // 4) Update pressure
+        pressure_update(rotational);
+
         // Shift old velocities
         old_old_velocity = old_velocity;
         old_velocity = update_velocity_solution;
 
-        // pressure_solution = old_pressure + deltap;
-
-        pressure_update(rotational);
-
         compute_lift_drag();
 
         output_results();
-        // print every 100 time steps
-        // if (time_step % 100 == 0)
-        // {
-        //     output_results();
-        // }
-        // // Clear for next iteration
-        // velocity_solution = 0;
-        // pressure_solution = 0;
-        // update_velocity_solution = 0;
     }
 }
 
@@ -821,7 +815,6 @@ void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
     TrilinosWrappers::SparseMatrix mass_matrix;
     {
         TrilinosWrappers::SparsityPattern dsp_p(locally_owned_pressure, MPI_COMM_WORLD);
-        // Make sure we use the same constraints as for pressure (hanging nodes, BCs)
         DoFTools::make_sparsity_pattern(dof_handler_pressure,
                                         dsp_p,
                                         constraints_pressure,
@@ -887,15 +880,19 @@ void UncoupledNavierStokes<dim>::pressure_update(const bool rotational)
 
             for (unsigned int i = 0; i < dofs_per_cell_p; ++i)
             {
-                const double phi_i = fe_values_p.shape_value(i, q);
                 for (unsigned int j = 0; j < dofs_per_cell_p; ++j)
                 {
-                    const double phi_j = fe_values_p.shape_value(j, q);
                     // Mass matrix contribution
-                    cell_mass(i, j) += (phi_i * phi_j) * JxW;
+                    // ------
+                    // ∫ ψ_i·ψ_j dx
+                    // ------
+                    cell_mass(i, j) += (fe_values_p.shape_value(i, q) * fe_values_p.shape_value(j, q)) * JxW;
                 }
-                // RHS = ∫ div(u_tilde) * phi_i
-                cell_rhs(i) += (div_val * phi_i) * JxW;
+                // RHS 
+                // ------
+                // ∫ div(u~) ψ_i dx
+                // ------
+                cell_rhs(i) += (div_val * fe_values_p.shape_value(i, q)) * JxW;
             }
         }
 

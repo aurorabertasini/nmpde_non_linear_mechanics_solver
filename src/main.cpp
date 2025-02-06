@@ -34,12 +34,12 @@ int main(int argc, char *argv[])
     {                // std::cout << "Div u_star: " << div_u_star[q] << std::endl;
 
         std::cout << "Please choose the problem to solve:" << std::endl;
-        std::cout << "(1) Steady Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(2) Steady Navier-Stokesm Problem 3D" << std::endl;
-        std::cout << "(3) Monolithic Time Dependent Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(4) Monolithic Time Dependent Navier-Stokesm Problem 3D" << std::endl;
-        std::cout << "(5) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 2D" << std::endl;
-        std::cout << "(6) Incremental Chorin-Temam Time Dependent Navier-Stokesm Problem 3D" << std::endl;
+        std::cout << "(1) Steady Navier-Stokes Solver 2D" << std::endl;
+        std::cout << "(2) Steady Navier-Stokes Solver 3D" << std::endl;
+        std::cout << "(3) Monolithic Navier-Stokes Solver 2D" << std::endl;
+        std::cout << "(4) Monolithic Navier-Stokes Solver 3D" << std::endl;
+        std::cout << "(5) Uncoupled Navier-Stokesm Solver 2D" << std::endl;
+        std::cout << "(6) Uncoupled Navier-Stokesm Solver 3D" << std::endl;
         std::cout << std::endl;
         std::cout << "Enter your choice: ";
 
