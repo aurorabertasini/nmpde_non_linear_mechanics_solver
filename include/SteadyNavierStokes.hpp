@@ -1,70 +1,13 @@
 #ifndef STEADYNAVIERSTOKES_HPP
 #define STEADYNAVIERSTOKES_HPP
 
-#include <deal.II/base/conditional_ostream.h>
-#include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/convergence_table.h>
-#include <deal.II/base/function.h>
-#include <deal.II/base/utilities.h>
-#include <deal.II/base/tensor.h>
-
-#include <deal.II/distributed/fully_distributed_tria.h>
-
-#include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_renumbering.h>
-#include <deal.II/dofs/dof_tools.h>
-
-#include <deal.II/fe/fe_simplex_p.h>
-#include <deal.II/fe/fe_q.h>
-#include <deal.II/fe/fe_system.h>
-#include <deal.II/fe/fe_values.h>
-#include <deal.II/fe/fe_values_extractors.h>
-#include <deal.II/fe/mapping_fe.h>
-
-#include <deal.II/grid/grid_in.h>
-#include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/grid_out.h>
-#include <deal.II/grid/grid_tools.h>
-#include <deal.II/grid/tria.h>
-#include <deal.II/grid/grid_refinement.h>
-
-#include <deal.II/lac/block_vector.h>
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/solver_gmres.h>
-#include <deal.II/lac/trilinos_block_sparse_matrix.h>
-#include <deal.II/lac/trilinos_parallel_block_vector.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-#include <deal.II/lac/dynamic_sparsity_pattern.h>
-#include <deal.II/lac/vector.h>
-#include <deal.II/lac/trilinos_sparse_matrix.h>
-#include <deal.II/lac/trilinos_vector.h>
-#include <deal.II/lac/precondition.h>
-#include <deal.II/lac/affine_constraints.h>
-#include <deal.II/lac/full_matrix.h>
-
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/matrix_tools.h>
-#include <deal.II/numerics/vector_tools.h>
-#include <deal.II/numerics/error_estimator.h>
-
-#include <fstream>
-#include <filesystem>
-#include <iostream>
-#include <mpi.h>
+#include "../include/includes_file.hpp"
 
 using namespace dealii;
 
-/**
- * Base class: SteadyNavierStokes
- *
- * Templated on <int dim>
- * Holds:
- *  - Mesh & polynomial degrees
- *  - Constants Re, H, D, uMax, uMean, p_out, nu
- *  - One method run_full_problem_pipeline() that instantiates
- *    and runs Stokes -> NonLinearCorrection in a single workflow.
- */
+// -----------------------------------------------------------
+// Base class: SteadyNavierStokes
+// -----------------------------------------------------------
 template <int dim>
 class SteadyNavierStokes
 {
@@ -79,20 +22,21 @@ public:
     : mesh_file_name(mesh_file_name_in)
     , degree_velocity(degree_velocity_in)
     , degree_pressure(degree_pressure_in)
+    , Re(Re_in)     // User input
     , H(0.41)       // Fixed by geometry
     , D(0.1)        // Fixed by geometry
     , uMax(dim == 2 ? 0.3 : 0.45) // Fixed by problem
     , uMean(dim == 2 ? 2./3. * uMax : 4./9. * uMax) // Fixed by problem
-    , Re(Re_in)     // User input
-    , p_out(0.0)    // Fixed by problem
     , nu(uMean * D / Re)  // Fixed by problem
+    , p_out(0.0)    // Fixed by problem
+    , forcing_term()
+    , inlet_velocity(H, uMax)
     , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , pcout(std::cout, mpi_rank == 0)
     , mesh(MPI_COMM_WORLD)
     , dof_handler(mesh)
-    , forcing_term()
-    , inlet_velocity(H, uMax)
+
   {
   }
 
@@ -108,18 +52,22 @@ public:
    */
   void run_full_problem_pipeline();
 
+
   // -----------------------------------------------------------
   // Virtual methods for the typical solve steps
   // -----------------------------------------------------------
+
   virtual void setup();
   virtual void assemble();
   virtual void solve();
   virtual void output();
   virtual std::string get_output_directory();
 
+
   // -----------------------------------------------------------
   // Public getters 
   // -----------------------------------------------------------
+
   const std::string & get_mesh_file_name() const
   {
     return mesh_file_name;
@@ -161,6 +109,7 @@ public:
     return mesh;
   }
 
+
   // -----------------------------------------------------------
   // Custom Preconditioners
   // -----------------------------------------------------------
@@ -176,56 +125,6 @@ public:
     {
       dst = src;
     }
-  };
-
-  /**
-   * A block-diagonal preconditioner for (velocity, pressure).
-   */
-  class PreconditionBlockDiagonal
-  {
-  public:
-    void initialize(const TrilinosWrappers::SparseMatrix &velocity_stiffness_,
-                    const TrilinosWrappers::SparseMatrix &pressure_mass_)
-    {
-      velocity_stiffness = &velocity_stiffness_;
-      pressure_mass      = &pressure_mass_;
-
-      preconditioner_velocity.initialize(velocity_stiffness_);
-      preconditioner_pressure.initialize(pressure_mass_);
-    }
-
-    void vmult(TrilinosWrappers::MPI::BlockVector       &dst,
-               const TrilinosWrappers::MPI::BlockVector &src) const
-    {
-      // Velocity block
-      {
-        SolverControl                           solver_control_velocity(100000,
-                                               1e-2 * src.block(0).l2_norm());
-        SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_velocity(solver_control_velocity);
-        solver_cg_velocity.solve(*velocity_stiffness,
-                                 dst.block(0),
-                                 src.block(0),
-                                 preconditioner_velocity);
-      }
-
-      // Pressure block
-      {
-        SolverControl                           solver_control_pressure(1000,
-                                               1e-2 * src.block(1).l2_norm());
-        SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_pressure(solver_control_pressure);
-        solver_cg_pressure.solve(*pressure_mass,
-                                 dst.block(1),
-                                 src.block(1),
-                                 preconditioner_pressure);
-      }
-    }
-
-  protected:
-    const TrilinosWrappers::SparseMatrix *velocity_stiffness = nullptr;
-    const TrilinosWrappers::SparseMatrix *pressure_mass      = nullptr;
-
-    TrilinosWrappers::PreconditionILU preconditioner_velocity;
-    TrilinosWrappers::PreconditionILU preconditioner_pressure;
   };
 
   /**
@@ -287,55 +186,15 @@ public:
     mutable TrilinosWrappers::MPI::Vector tmp;
   };
 
-protected:
-  // ------------------------------------------------
-  // Base class data members
-  // ------------------------------------------------
 
-  // Mesh and polynomial degrees
-  std::string  mesh_file_name;
-  unsigned int degree_velocity;
-  unsigned int degree_pressure;
-
-  // Problem constants
-  const double H;      // Height of the Channel
-  const double D;      // Diameter of the Cylinder
-  const double uMax;   // Maximum Inflow Velocity
-  const double uMean;  // Mean Inflow Velocity
-  const double Re;     // Reynolds number
-  const double p_out;  // Pressure at the outlet
-  const double nu;     // Viscosity
-
-
-  // MPI
-  const unsigned int mpi_size;
-  const unsigned int mpi_rank;
-  ConditionalOStream pcout;
-
-  // Triangulation and DoF
-  parallel::fullydistributed::Triangulation<dim> mesh;
-  DoFHandler<dim> dof_handler;
-
-  // Finite element & quadrature
-  std::unique_ptr<FiniteElement<dim>>   fe;
-  std::unique_ptr<Quadrature<dim>>      quadrature;
-  std::unique_ptr<Quadrature<dim - 1>>  quadrature_face;
-
-  // Owned & relevant DoFs
-  IndexSet               locally_owned_dofs;
-  std::vector<IndexSet>  block_owned_dofs;
-  IndexSet               locally_relevant_dofs;
-  std::vector<IndexSet>  block_relevant_dofs;
-
-  // Matrices & vectors
-  TrilinosWrappers::BlockSparseMatrix system_matrix;
-  TrilinosWrappers::BlockSparseMatrix pressure_mass;
-  TrilinosWrappers::MPI::BlockVector  system_rhs;
-  TrilinosWrappers::MPI::BlockVector  solution_owned;
-  TrilinosWrappers::MPI::BlockVector  solution;
-
+  // -----------------------------------------------------------
+  // Problem Customization Functions
+  // -----------------------------------------------------------
 
   // Forcing Term
+  /*
+  *  A forcing term that is zero everywhere for flow past cylinder test case
+  */
   class ForcingTerm : public Function<dim>
   {
   public:
@@ -351,6 +210,11 @@ protected:
   };
 
   // Inlet Velocity
+  /*
+  *  Inlet velocity profile for flow past cylinder test case
+  *  2D: U = 4 U_m y (H - y) / H^2, V = 0
+  *  3D: U = 16 U_m y z (H - y)(H - z) / H^4, V = W = 0
+  */
   class InletVelocity : public Function<dim>
   {
   public:
@@ -364,14 +228,12 @@ protected:
     {
       if constexpr (dim == 2)
       {
-        // 2D inlet velocity: 4 U_m y (H - y) / H^2
         values[0] = 4.0 * uMax * p[1] * (H - p[1]) / (H * H);
         for (unsigned int i = 1; i < dim + 1; ++i)
           values[i] = 0.0;
       }
       else if constexpr (dim == 3)
       {
-        // 3D inlet velocity: 16 U_m y z (H - y)(H - z) / H^4 for U(0,y,z)
         values[0] = 16.0 * uMax * p[1] * p[2] * (H - p[1]) * (H - p[2]) / (H * H * H * H);
         for (unsigned int i = 1; i < dim + 1; ++i)
           values[i] = 0.0;
@@ -395,13 +257,68 @@ protected:
     const double uMax;
   };
 
-  ForcingTerm   forcing_term;
-  InletVelocity inlet_velocity;
+protected:
+
+  // ------------------------------------------------
+  // Base class data members
+  // ------------------------------------------------
+
+  // Constructor Input Parameters
+  std::string  mesh_file_name;              // Mesh file name
+  const unsigned int degree_velocity;       // Velocity polynomial degree
+  const unsigned int degree_pressure;       // Pressure polynomial degree
+  const double Re;                          // Reynolds number
+
+  // Geometrical & Physical Values
+  const double H;                           // Height of the channel
+  const double D;                           // Diameter of the obstacle
+  const double uMax;                        // Maximum inflow velocity
+  const double uMean;                       // Mean inflow velocity
+  const double nu;                          // Viscosity
+  const double p_out;                       // Outlet Neumann BC value
+
+  // Post processing data
+  double lift;
+  double drag;
+  double deltaP;
+
+  // Problem-specific objects
+  ForcingTerm   forcing_term;               // Forcing term
+  InletVelocity inlet_velocity;             // Inlet velocity
+
+  // MPI tools
+  const unsigned int mpi_size;              // Number of MPI processes
+  const unsigned int mpi_rank;              // Rank of the process   
+  ConditionalOStream pcout;                 // Conditional output stream
+
+  // FEM objects
+  parallel::fullydistributed::Triangulation<dim> mesh;       // Parallel mesh
+  DoFHandler<dim> dof_handler;                               // DoF handler      
+  std::unique_ptr<FiniteElement<dim>>   fe;                  // Finite element handler
+  std::unique_ptr<Quadrature<dim>>      quadrature;          // Domain quadrature 
+  std::unique_ptr<Quadrature<dim - 1>>  quadrature_face;     // Face quadrature
+  IndexSet               locally_owned_dofs;       // Locally owned DoFs
+  std::vector<IndexSet>  block_owned_dofs;         // Block-wise owned DoFs
+  IndexSet               locally_relevant_dofs;    // Locally relevant DoFs
+  std::vector<IndexSet>  block_relevant_dofs;      // Block-wise relevant DoFs
+
+  // Matrices & vectors
+  TrilinosWrappers::BlockSparseMatrix system_matrix;     // System LHS matrix
+  TrilinosWrappers::BlockSparseMatrix pressure_mass;     // Pressure mass matrix
+  TrilinosWrappers::MPI::BlockVector  system_rhs;        // System RHS vector
+  TrilinosWrappers::MPI::BlockVector  solution_owned;    // Solution vector (owned)
+  TrilinosWrappers::MPI::BlockVector  solution;          // Solution vector (complete)
 };
+
 
 // ----------------------------------------------------------------------------
 // Derived class: Stokes<dim>
 // ----------------------------------------------------------------------------
+/**
+  * A derived class that solves the Stokes problem to provide
+  * a proper initial solution for the Newton Problem, 
+  * solved through the NonLinearCorrection class.   
+  */
 template <int dim>
 class Stokes : public SteadyNavierStokes<dim>
 {
@@ -430,9 +347,11 @@ public:
   }
 };
 
+
 // ----------------------------------------------------------------------------
-// Derived class: NonLinearCorrection<dim>
+// Derived class: NonLinearCorrection
 // ----------------------------------------------------------------------------
+
 template <int dim>
 class NonLinearCorrection : public SteadyNavierStokes<dim>
 {
@@ -440,7 +359,7 @@ public:
   /**
    * Reuse the same parameters from a given Stokes object.
    * We call the SteadyNavierStokes base constructor with
-   * the public getters from stokes_obj, then copy its mesh.
+   * the public getters from stokes_obj, then obtain its mesh.
    */
   NonLinearCorrection(const Stokes<dim> &stokes_obj)
     : SteadyNavierStokes<dim>(stokes_obj.get_mesh_file_name(),
@@ -453,29 +372,22 @@ public:
     // Copy the fully-distributed Triangulation
     this->mesh.copy_triangulation(stokes_obj.get_mesh());
 
-    // Compute uMean and scaling_factor based on dimension
+    // Compute scaling_factor for lift and drag computation, based on dimension
+    /*
+    *  Scaling factor for flow past cylinder test case
+    *  2D: scaling_factor = 2 / (Umean^2 * D)
+    *  3D: scaling_factor = 2 / (Umean^2 * D * H)
+    */
+    double uMean = this->uMean;
+    double D = this->D;
     if constexpr(dim == 2)
     {
-      // Umean = (2/3) * U(0, H/2)
-      double uMean = this->uMean;
-      double D = this->D;
-      
-      // scaling_factor = 2 / (mean^2 * D)
       scaling_factor = 2.0 / (uMean * uMean * D);
-      
-      this->pcout << "2D Scaling Factor: " << scaling_factor << std::endl;
     }
     else if constexpr(dim == 3)
     {
-      // Ustar = (4/9) * U(0, H/2, H/2)
-      double uMean = this->uMean;
-      double D = this->D;
       double H = this->H;
-      
-      // scaling_factor = 2 / (Umean^2 * D * H)
       scaling_factor = 2.0 / (uMean * uMean * D * H);
-      
-      this->pcout << "3D Scaling Factor: " << scaling_factor << std::endl;
     }
     else
     {
@@ -490,9 +402,8 @@ public:
   void output() override;
   std::string get_output_directory() override;
 
-
   /**
-   * Provide an initial condition for the iterative scheme.
+   * Provide an initial condition for the iterative scheme
    */
   void set_initial_conditions(const TrilinosWrappers::MPI::BlockVector solution_stokes_)
   {
@@ -501,31 +412,27 @@ public:
   }
 
   /**
-   * Post-processing function (lift/drag, etc.).
+   *  Compute lift, drag and DeltaP post processing function
    */
-  void compute_lift_drag();
+  void compute_lift_drag(double& lift, double& drag, double& delta_P);
 
 protected:
-  unsigned int       iter       = 0;
-  const unsigned int maxIter    = 10;
-  const double       update_tol = 1e-7;
+  unsigned int       iter       = 0;      // Newton iterations counter
+  const unsigned int maxIter    = 20;     // Maximum iterations
+  const double       tolerance  = 1e-7;   // Update tolerance
 
-  // Extractors for velocity & pressure
-  FEValuesExtractors::Vector u_k;
-  FEValuesExtractors::Scalar p_k;
-
-  // Constraints
-  AffineConstraints<double> constraints;
+  // Extractors and constraints
+  FEValuesExtractors::Vector u_k;          // Velocity extractor
+  FEValuesExtractors::Scalar p_k;          // Pressure extractor
+  AffineConstraints<double> constraints;   // Constraints
 
   // For iterative scheme
-  TrilinosWrappers::MPI::BlockVector solution_old;
-  TrilinosWrappers::MPI::BlockVector new_res;
+  TrilinosWrappers::MPI::BlockVector solution_old;  // Old solution
+  TrilinosWrappers::MPI::BlockVector new_res;       // Residual at current iteration
 
-  // Scaling factor for lift/drag computation
-  double scaling_factor;
-
-  // Example: Points of interest for any local postprocessing
-  std::vector<Point<dim>> points_of_interest;
+  // Post-processing data 
+  double scaling_factor;                        // Scaling factor for lift and drag
+  std::vector<Point<dim>> points_of_interest;   // Points of interest for pressure difference
 };
 
 

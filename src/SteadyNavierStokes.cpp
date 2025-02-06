@@ -1,15 +1,15 @@
 #include "../include/SteadyNavierStokes.hpp"
 
-// ===============================
-// SteadyNavierStokes<dim> methods
-// ===============================
+// -----------------------------------------------------------
+// SteadyNavierStokes methods
+// -----------------------------------------------------------
 
 template <int dim>
 void SteadyNavierStokes<dim>::run_full_problem_pipeline()
 {
-  this->pcout << "===============================================" << std::endl;
+  this->pcout << "==============================================="      << std::endl;
   this->pcout << "Running full pipeline: Stokes -> NonLinearCorrection" << std::endl;
-  this->pcout << "===============================================" << std::endl;
+  this->pcout << "==============================================="      << std::endl;
 
   // 1) Create a Stokes solver with this object's parameters
   Stokes<dim> stokes_problem(this->mesh_file_name,
@@ -26,7 +26,7 @@ void SteadyNavierStokes<dim>::run_full_problem_pipeline()
   // 3) Retrieve the final solution of the Stokes problem
   TrilinosWrappers::MPI::BlockVector stokes_solution = stokes_problem.get_solution();
 
-  // 4) Create a NonLinearCorrection solver from the Stokes problem
+  // 4) Create a NonLinearCorrection solver object from the Stokes problem object
   NonLinearCorrection<dim> non_linear_correction(stokes_problem);
 
   // 5) Set the initial condition of the incremental solver to the Stokes solution
@@ -34,11 +34,11 @@ void SteadyNavierStokes<dim>::run_full_problem_pipeline()
 
   // 6) Run the incremental solver steps
   non_linear_correction.setup();
-  non_linear_correction.solve();   // Assemble incorporated in solve()
+  non_linear_correction.solve();   // Assemble called inside solve() for each iteration
   non_linear_correction.output();
 
-  // 7) Optionally compute lift & drag
-  non_linear_correction.compute_lift_drag();
+  // 7) Compute lift, drag and pressure difference
+  non_linear_correction.compute_lift_drag(lift, drag, deltaP);
 }
 
 template <int dim>
@@ -51,7 +51,7 @@ void SteadyNavierStokes<dim>::setup()
   {
     GridIn<dim> grid_in;
     grid_in.attach_triangulation(mesh_serial);
-
+  
     std::ifstream grid_in_file(this->mesh_file_name);
     AssertThrow(grid_in_file,
                 ExcMessage("Could not open mesh file '" + this->mesh_file_name + "'"));
@@ -63,18 +63,18 @@ void SteadyNavierStokes<dim>::setup()
   // Partition the mesh among MPI processes
   GridTools::partition_triangulation(this->mpi_size, mesh_serial);
 
-  // Create a parallel Triangulation from the serial one
+  // Create a parallel-ready triangulation description from the given serial mesh.
   const auto construction_data =
     TriangulationDescription::Utilities::create_description_from_triangulation(
       mesh_serial, MPI_COMM_WORLD);
   this->mesh.create_triangulation(construction_data);
 
-  this->pcout << "  Number of elements = "
-              << this->mesh.n_global_active_cells() << std::endl;
+  this->pcout << "  Number of elements = " << this->mesh.n_global_active_cells() << std::endl;
   this->pcout << "-----------------------------------------------" << std::endl;
 }
 
 // Generic methods for the base class, do nothing by default
+
 template <int dim>
 void SteadyNavierStokes<dim>::assemble()
 {
@@ -96,9 +96,12 @@ std::string SteadyNavierStokes<dim>::get_output_directory()
   return "./";  
 }
 
-// ===============================
-// Stokes<dim> methods
-// ===============================
+// -----------------------------------------------------------
+// Stokes methods
+// -----------------------------------------------------------
+/*
+ *  Source: https://github.com/michelebucelli/nmpde-labs-aa-23-24.git
+*/
 
 template <int dim>
 void Stokes<dim>::setup()
@@ -109,7 +112,7 @@ void Stokes<dim>::setup()
   // Now proceed with the "Stokes" specifics:
   this->pcout << "Initializing the finite element space" << std::endl;
 
-  // For velocity and pressure
+  //  Initialize the finite element space 
   const FE_SimplexP<dim> fe_scalar_velocity(this->degree_velocity);
   const FE_SimplexP<dim> fe_scalar_pressure(this->degree_pressure);
 
@@ -123,6 +126,7 @@ void Stokes<dim>::setup()
   this->pcout << "  DoFs per cell              = "
               << this->fe->dofs_per_cell << std::endl;
 
+  // Initialize the quadrature 
   this->quadrature = std::make_unique<QGaussSimplex<dim>>(this->fe->degree + 1);
   this->pcout << "  Quadrature points per cell = "
               << this->quadrature->size() << std::endl;
@@ -268,10 +272,11 @@ void Stokes<dim>::assemble()
 
     for (unsigned int q = 0; q < n_q; ++q)
     {
+      // Forcing term expressed as a Tensor 
       Vector<double> forcing_loc(dim);
       this->forcing_term.vector_value(fe_values.quadrature_point(q), forcing_loc);
-
       Tensor<1, dim> forcing_tensor;
+
       for (unsigned int d = 0; d < dim; ++d)
         forcing_tensor[d] = forcing_loc[d];
 
@@ -307,6 +312,9 @@ void Stokes<dim>::assemble()
     }
 
     // Neumann BC for p_out on boundary_id = 1 (Outlet)
+    /*
+     * Default value 0.0 for p_out simulates free outflow, through natural Neumann BC
+     */
     if (cell->at_boundary())
     {
       for (unsigned int f = 0; f < cell->n_faces(); ++f)
@@ -318,7 +326,6 @@ void Stokes<dim>::assemble()
             {
               for (unsigned int i = 0; i < dofs_per_cell; ++i)
               {
-                // Use base-class protected member "p_out"
                 cell_rhs(i) += -(this->p_out)
                                 * scalar_product(fe_face_values.normal_vector(q),
                                                 fe_face_values[velocity].value(i, q))
@@ -348,8 +355,8 @@ void Stokes<dim>::assemble()
 
     // Dirichlet Boundary Conditions
       boundary_functions[0] = &this->inlet_velocity;  // Inlet
-      boundary_functions[2] = &zero_function;         // Walls
-      boundary_functions[3] = &zero_function;         // Obstacle
+      boundary_functions[2] = &zero_function;         // Walls - No-slip
+      boundary_functions[3] = &zero_function;         // Obstacle - No-slip
     
     if constexpr (dim == 2)
     {
@@ -484,9 +491,9 @@ std::string Stokes<dim>::get_output_directory()
     return sub_dir_path.string();
 }
 
-// ===============================
-// NonLinearCorrection<dim> methods
-// ===============================
+// -----------------------------------------------------------
+// NonLinearCorrection methods
+// -----------------------------------------------------------
 
 template <int dim>
 void NonLinearCorrection<dim>::setup()
@@ -557,9 +564,9 @@ void NonLinearCorrection<dim>::setup()
     Functions::ZeroFunction<dim> zero_function(dim + 1);
 
     // Dirichlet Boundary Conditions
-      boundary_functions[0] = &this->inlet_velocity;  // inlet
-      boundary_functions[2] = &zero_function;         // walls
-      boundary_functions[3] = &zero_function;         // obstacle
+      boundary_functions[0] = &this->inlet_velocity;  // Inlet
+      boundary_functions[2] = &zero_function;         // Walls - No-Slip
+      boundary_functions[3] = &zero_function;         // Obstacle - No-Slip
 
     if constexpr (dim == 2)
     {
@@ -623,9 +630,7 @@ void NonLinearCorrection<dim>::setup()
 
   this->system_rhs.reinit(this->block_owned_dofs, MPI_COMM_WORLD);
   this->solution_owned.reinit(this->block_owned_dofs, MPI_COMM_WORLD);
-  this->solution.reinit(this->block_owned_dofs,
-                        this->block_relevant_dofs,
-                        MPI_COMM_WORLD);
+  this->solution.reinit(this->block_owned_dofs, this->block_relevant_dofs, MPI_COMM_WORLD);
 }
 
 template <int dim>
@@ -696,7 +701,8 @@ void NonLinearCorrection<dim>::assemble()
                                 * scalar_product(grad_phi_u[i], grad_phi_u[j]) 
                                 * fe_values.JxW(q);
 
-          local_matrix(i, j) += phi_u[j] * transpose(previous_velocity_gradients[q]) 
+          local_matrix(i, j) += phi_u[j] 
+                                * transpose(previous_velocity_gradients[q]) 
                                 * phi_u[i]
                                 * fe_values.JxW(q);
 
@@ -716,12 +722,12 @@ void NonLinearCorrection<dim>::assemble()
       }
     }
 
-     // Neumann boundary condition for p_out on boundary_id = 2 
+     // Neumann boundary condition for p_out on boundary_id = 1 
         if (cell->at_boundary())
         {
             for (unsigned int f = 0; f < cell->n_faces(); ++f)
             {
-                if (cell->face(f)->at_boundary() && (cell->face(f)->boundary_id() == 2))
+                if (cell->face(f)->at_boundary() && (cell->face(f)->boundary_id() == 1))
                 {
                   fe_face_values.reinit(cell, f);
                   for (unsigned int q = 0; q < n_q_face; ++q)
@@ -759,60 +765,56 @@ void NonLinearCorrection<dim>::solve()
   {
     // Each iteration re-assembles with the updated solution
     this->assemble();
-    this->pcout << "RHS Norm Value at iteration " << this->iter
-                << " => " << this->system_rhs.l2_norm() << std::endl;
+    double update_norm = tolerance + 1.0; // Initialize to a value greater than update_tol
+    
+    SolverControl solver_control(2'000'000, 1e-9);
+    SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
 
-    double update_norm = update_tol + 1.0;
+    // Very simple preconditioner: Identity
+    typename SteadyNavierStokes<dim>::PreconditionIdentity preconditioner;
+    constraints.set_zero(this->solution_owned); // Set the inhomogeneous constrained components to 0
 
-    if (update_norm < update_tol)
+    solver.solve(this->system_matrix,
+                  this->solution_owned,
+                  this->system_rhs,
+                  preconditioner);
+
+    constraints.distribute(this->solution_owned);  // Recover the constrained components
+
+    this->pcout << "  " << solver_control.last_step()
+                << " GMRES iterations" << std::endl;
+
+    this->solution = this->solution_owned;
+
+    // Evaluate update = (solution - solution_old)
+    this->new_res.reinit(this->solution);
+    this->new_res = this->solution;
+    this->new_res.sadd(1.0, -1.0, this->solution_old);
+
+    // Compute L2 norm
+    double local_sum = 0.0;
+    for (unsigned int k = 0; k < this->new_res.size(); ++k)
+      local_sum += this->new_res(k) * this->new_res(k);
+
+    double global_sum = 0.0;
+    MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    update_norm = std::sqrt(global_sum);
+
+    double residual = update_norm / this->solution.size(); // Scale-independent residual
+
+    if (this->mpi_rank == 0)
+      std::cout << "Residual after update = " << residual << std::endl;
+
+    this->solution_old = this->solution;
+
+    if (this->mpi_rank == 0)
+      std::cout << "Iteration " << iter << " completed." << std::endl;
+
+    if (residual < tolerance) // Convergence check
       break;
-    else
-    {
-      SolverControl solver_control(2'000'000, 1e-4);
-      SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
-
-      // Very simple preconditioner: Identity
-      typename SteadyNavierStokes<dim>::PreconditionIdentity preconditioner;
-      constraints.set_zero(this->solution_owned); // impose homogeneous constraints on guess
-
-      solver.solve(this->system_matrix,
-                   this->solution_owned,
-                   this->system_rhs,
-                   preconditioner);
-
-      constraints.distribute(this->solution_owned);
-
-      this->pcout << "  " << solver_control.last_step()
-                  << " GMRES iterations" << std::endl;
-
-      this->solution = this->solution_owned;
-
-      // Evaluate update = (solution - solution_old)
-      this->new_res.reinit(this->solution);
-      this->new_res = this->solution;
-      this->new_res.sadd(1.0, -1.0, this->solution_old);
-
-      // Compute L2 norm
-      double local_sum = 0.0;
-      for (unsigned int k = 0; k < this->new_res.size(); ++k)
-        local_sum += this->new_res(k) * this->new_res(k);
-
-      double global_sum = 0.0;
-      MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-      update_norm = std::sqrt(global_sum);
-
-      if (this->mpi_rank == 0)
-        std::cout << "L2 norm of the update = " << update_norm << std::endl;
-
-      this->solution_old = this->solution;
-
-      if (this->mpi_rank == 0)
-        std::cout << "Iteration " << iter << " completed." << std::endl;
-
-      if (update_norm < update_tol)
-        break;
-    }
   }
+  if (iter == maxIter)
+    this->pcout << "Nonlinear solver did not converge." << std::endl;
 }
 
 template <int dim>
@@ -861,7 +863,7 @@ void NonLinearCorrection<dim>::output()
 
 
 template <int dim>
-void NonLinearCorrection<dim>::compute_lift_drag()
+void NonLinearCorrection<dim>::compute_lift_drag(double& lift, double& drag, double& DeltaP)
 {
     // Define quadrature for faces
     QGauss<dim - 1> face_quadrature_formula(3);
@@ -926,7 +928,7 @@ void NonLinearCorrection<dim>::compute_lift_drag()
             // Iterate over quadrature points on the face
             for (unsigned int q = 0; q < n_q_points; ++q)
             {
-                // Get the normal vector (ensure consistent orientation)
+                // Get the normal vector
                 normal_vector = -fe_face_values.normal_vector(q);
 
                 // Compute fluid pressure tensor (p * I)
@@ -947,10 +949,7 @@ void NonLinearCorrection<dim>::compute_lift_drag()
         }
     }
 
-    // Print local partial results for debugging
-    std::cout << "Rank " << this->mpi_rank << ": Local Drag = " << local_drag
-              << ", Local Lift = " << local_lift << std::endl;
-
+   
     // Reduce lift and drag across all processes to rank 0
     double total_lift = 0.0;
     double total_drag = 0.0;
@@ -1043,6 +1042,11 @@ void NonLinearCorrection<dim>::compute_lift_drag()
         std::cout << "Total Lift = " << total_lift << std::endl;
     }
 
+    // Assign results to output variables
+    lift = total_lift;
+    drag = total_drag;
+    DeltaP = global_pres_point1 - global_pres_point2;
+
     // Ensure all processes have completed the reductions
     MPI_Barrier(MPI_COMM_WORLD);
 }
@@ -1079,15 +1083,11 @@ std::string NonLinearCorrection<dim>::get_output_directory()
 }
 
 
-
-
-
-
 // ===============================
 // Explicit Instantiations
 // ===============================
 
-// If you only want 2D and 3D, do so here:
+// 2D and 3D cases
 template class SteadyNavierStokes<2>;
 template class Stokes<2>;
 template class NonLinearCorrection<2>;
