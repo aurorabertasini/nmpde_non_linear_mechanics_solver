@@ -247,6 +247,7 @@ protected:
 	const double uMean;  									// Mean inflow velocity
 	const double nu;     									// Viscosity
 	const double p_out;  									// Outlet Neumann BC value
+	const bool   zero_neumann = true;  							// Homogeneous Neumann BC flag
 
 	// ================================
 	// Post-processing Data

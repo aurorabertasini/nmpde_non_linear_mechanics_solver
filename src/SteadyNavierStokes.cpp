@@ -309,6 +309,8 @@ void Stokes<dim>::assemble()
             {
               for (unsigned int i = 0; i < dofs_per_cell; ++i)
               {
+
+                if (this->zero_neumann!=true)
                 cell_rhs(i) += -(this->p_out)
                                 * scalar_product(fe_face_values.normal_vector(q),
                                                 fe_face_values[velocity].value(i, q))
@@ -662,26 +664,39 @@ void NonLinearCorrection<dim>::assemble()
 
       for (unsigned int i = 0; i < dofs_per_cell; ++i)
       {
-        for (unsigned int j = 0; j < dofs_per_cell; ++j)
-        {
-          local_matrix(i, j) += this->nu 
-                                * scalar_product(grad_phi_u[i], grad_phi_u[j]) 
-                                * fe_values.JxW(q);
+          for (unsigned int j = 0; j < dofs_per_cell; ++j)
+          {
 
-          local_matrix(i, j) += phi_u[j] 
-                                * transpose(previous_velocity_gradients[q]) 
-                                * phi_u[i]
-                                * fe_values.JxW(q);
+            // ∫ ν * ∇(φ_j_k+1) : ∇(φ_i) dx
+            local_matrix(i, j) += this->nu 
+                                  * scalar_product(grad_phi_u[i], grad_phi_u[j]) 
+                                  * fe_values.JxW(q);
+                      
+            // ∫  ∇(φ_j_k) * (φ_j_k+1) * (φ_i) dx   
+            local_matrix(i, j) += phi_u[j] 
+                                  * transpose(previous_velocity_gradients[q]) 
+                                  * phi_u[i]
+                                  * fe_values.JxW(q);
 
-          local_matrix(i, j) += previous_velocity_values[q] 
-                                * transpose(grad_phi_u[j]) 
-                                * phi_u[i]
-                                * fe_values.JxW(q);
+            // ∫ (φ_j_k) * ∇(φ_j_k+1) * (φ_i) dx 
+            local_matrix(i, j) += previous_velocity_values[q] 
+                                  * transpose(grad_phi_u[j]) 
+                                  * phi_u[i]
+                                  * fe_values.JxW(q);
 
-          local_matrix(i, j) -= phi_p[j] * div_phi_u[i] * fe_values.JxW(q);
-          local_matrix(i, j) -= phi_p[i] * div_phi_u[j] * fe_values.JxW(q);
-        }
+            // ∫ - ψ_j_k+1 * div(φ_i) dx
+            local_matrix(i, j) -= phi_p[j] 
+                                  * div_phi_u[i] 
+                                  * fe_values.JxW(q);
 
+            // ∫ - (ψ_i) * div(φ_j_k+1) dx
+            local_matrix(i, j) -= phi_p[i] 
+                                  * div_phi_u[j] 
+                                  * fe_values.JxW(q);
+
+          }
+
+        // ∫ ∇(φ_j_k) * (φ_j_k) * (φ_i) dx
         local_rhs[i] += previous_velocity_values[q] 
                         * transpose(previous_velocity_gradients[q])
                         * phi_u[i] 
@@ -699,13 +714,18 @@ void NonLinearCorrection<dim>::assemble()
                   for (unsigned int q = 0; q < n_q_face; ++q)
                   {
                       for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                      {
+                      {   
+
+                        if (this->zero_neumann!=true)
+                        {
+                        // ∫ f_neumann·φ_i dx
                           local_rhs[i] += -(this->p_out)
                                           * scalar_product(fe_face_values.normal_vector(q),
                                                           fe_face_values[u_k].value(i, q))
                                           * fe_face_values.JxW(q);
-                      }
-                  } 
+                        }
+                      } 
+                  }
                 }
             }
         }

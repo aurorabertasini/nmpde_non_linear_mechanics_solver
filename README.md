@@ -72,3 +72,18 @@ The executable will be created into `build`, and can be executed through
 ```bash
 $ ./executable-name
 ```
+
+### Executing
+After having generated the executable the user can start the computation by execute from the build directory the command:
+```
+./main
+```
+or
+```
+mpirun ./main
+```
+to execute it in parallel using MPI.
+
+### Outputs
+During the execution a directory `outputs` is generated inside the build folder containing the result of the computation.
+The  `outputs` is automatically divided in subfolder depending on the type of simulation executed and the reynolds number
