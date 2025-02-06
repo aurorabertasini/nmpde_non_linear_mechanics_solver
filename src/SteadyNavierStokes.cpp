@@ -91,7 +91,7 @@ void SteadyNavierStokes<dim>::output()
 }
 
 template <int dim>
-std::string SteadyNavierStokes<dim>::get_output_directory()
+std::string SteadyNavierStokes<dim>::get_output_directory() const
 {
   return "./";  
 }
@@ -461,7 +461,7 @@ void Stokes<dim>::output()
 
 
 template <int dim>
-std::string Stokes<dim>::get_output_directory()
+std::string Stokes<dim>::get_output_directory() const 
 {
     namespace fs = std::filesystem;
 
@@ -1051,7 +1051,7 @@ void NonLinearCorrection<dim>::compute_lift_drag()
 }
 
 template <int dim>
-std::string NonLinearCorrection<dim>::get_output_directory()
+std::string NonLinearCorrection<dim>::get_output_directory() const
 {
     namespace fs = std::filesystem;
 

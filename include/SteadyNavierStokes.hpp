@@ -1,7 +1,7 @@
 #ifndef STEADYNAVIERSTOKES_HPP
 #define STEADYNAVIERSTOKES_HPP
 
-#include "../include/includes_file.hpp"
+#include "includes_file.hpp"
 
 using namespace dealii;
 
@@ -61,7 +61,7 @@ public:
   virtual void assemble();
   virtual void solve();
   virtual void output();
-  virtual std::string get_output_directory();
+  virtual std::string get_output_directory() const;
 
 
   // -----------------------------------------------------------
@@ -190,7 +190,6 @@ public:
   // -----------------------------------------------------------
   // Problem Customization Functions
   // -----------------------------------------------------------
-
 
 
   // Inlet Velocity
@@ -323,7 +322,7 @@ public:
   void assemble() override;
   void solve() override;
   void output() override;
-  std::string get_output_directory() override;
+  std::string get_output_directory() const override;
 
   TrilinosWrappers::MPI::BlockVector get_solution() const
   {
@@ -384,7 +383,7 @@ public:
   void assemble() override;
   void solve() override;
   void output() override;
-  std::string get_output_directory() override;
+  std::string get_output_directory() const override;
 
   /**
    * Provide an initial condition for the iterative scheme

@@ -76,15 +76,13 @@ int main(int argc, char *argv[])
     case 3:
     {
         MonolithicNavierStokes<2> monolithicNavierStokes(mesh2DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        monolithicNavierStokes.setup();
-        monolithicNavierStokes.solve();
+        monolithicNavierStokes.run();
         break;
     }
     case 4:
     {
         MonolithicNavierStokes<3> monolithicNavierStokes(mesh3DPath, degreeVelocity, degreePressure, simulationPeriod, timeStep, Re);
-        monolithicNavierStokes.setup();
-        monolithicNavierStokes.solve();
+        monolithicNavierStokes.run();
         break;
     }
     case 5:

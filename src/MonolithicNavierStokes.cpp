@@ -20,7 +20,7 @@ void MonolithicNavierStokes<dim>::setup()
             create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
         mesh.create_triangulation(construction_data);
 
-        pcout << "  Number of elements = " << mesh.n_global_active_cells()
+        pcout << "Number of elements = " << mesh.n_global_active_cells()
               << std::endl;
     }
 
@@ -346,6 +346,10 @@ void MonolithicNavierStokes<dim>::assemble_rhs()
 
     std::vector<types::global_dof_index> dof_indices(dofs_per_cell);
 
+    Vector<double> f_neumann_loc(dim + 1);
+
+    Tensor<1, dim> f_neumann_tensor;
+
     system_rhs = 0.0;
 
     for (const auto &cell : dof_handler.active_cell_iterators())
@@ -370,23 +374,15 @@ void MonolithicNavierStokes<dim>::assemble_rhs()
             for (unsigned int d = 0; d < dim; ++d)
                 forcing_term_new_tensor[d] = f_new_loc[d];
 
-            // Vector<double> f_neumann_loc(dim);
-            // neumann_condition.set_time(time);
-            // neumann_condition.vector_value(fe_values.quadrature_point(q),
-            //                                f_neumann_loc);
-            // Tensor<1, dim> f_neumann_tensor;
-            // for (unsigned int d = 0; d < dim; ++d)
-            //     f_neumann_tensor[d] = f_neumann_loc[d];
-
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
                 cell_rhs(i) += scalar_product(previous_velocity_values[q],
                                               fe_values[velocity].value(i, q)) *
                                fe_values.JxW(q) / deltat;
                 
-                // cell_rhs(i) += scalar_product(forcing_term_new_tensor,
-                //                                           fe_values[velocity].value(i, q)) *
-                //                            fe_values.JxW(q);
+                cell_rhs(i) += scalar_product(forcing_term_new_tensor,
+                                                          fe_values[velocity].value(i, q)) *
+                                           fe_values.JxW(q);
             }
         }
 
@@ -402,13 +398,17 @@ void MonolithicNavierStokes<dim>::assemble_rhs()
 
                     for (unsigned int q = 0; q < n_q_face; ++q)
                     {
+                        neumann_function.vector_value(
+                            fe_face_values.quadrature_point(q), f_neumann_loc);
+
+                        for (unsigned int d = 0; d < dim; ++d)
+                            f_neumann_tensor[d] = f_neumann_loc(d);
+                        
                         for (unsigned int i = 0; i < dofs_per_cell; ++i)
                         {
                             cell_rhs(i) +=
-                                -p_out *
-                                scalar_product(fe_face_values.normal_vector(q),
-                                               fe_face_values[velocity].value(i,
-                                                                              q)) *
+                                scalar_product(f_neumann_tensor,
+                                               fe_face_values[velocity].value(i, q)) *
                                 fe_face_values.JxW(q);
                         }
                     }
@@ -617,6 +617,14 @@ void MonolithicNavierStokes<dim>::output(const unsigned int &time_step)
     data_out.write_vtu_with_pvtu_record(
         output_dir, "output_", time_step, MPI_COMM_WORLD, 3);
 }
+
+template <unsigned int dim>
+void MonolithicNavierStokes<dim>::run()
+{
+    setup();
+    solve();
+}
+
 
 template <unsigned int dim>
 std::string MonolithicNavierStokes<dim>::get_output_directory()
