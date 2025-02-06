@@ -457,7 +457,7 @@ template <unsigned int dim>
 void MonolithicNavierStokes<dim>::solve_time_step()
 {
     // Choose the preconditioner type:
-    // 1 = BLOCK DIAGONAL, 2 = SIMPLE, 3 = ASIMPLE, 4 = YOSIDA.
+    // 1 = SIMPLE, 2 = ASIMPLE, 3 = YOSIDA, 4 = AYOSIDA.
     int precond_type = 2; // Set this value as needed
 
     // Local parameters for inner solvers and preconditioner initialization.
@@ -465,7 +465,6 @@ void MonolithicNavierStokes<dim>::solve_time_step()
     unsigned int maxiter_inner = 10000; // Maximum iterations for inner solvers
     double tol_inner = 1e-5;            // Tolerance for inner solvers
     bool use_ilu = false;               // Flag: true for ILU, false for AMG
-    bool use_inner_solver = false;      // Flag: true for inner GMRES, false for inner CG
 
     // Set up the outer GMRES solver.
     SolverControl solver_control(10000, 1e-7);
@@ -476,19 +475,8 @@ void MonolithicNavierStokes<dim>::solve_time_step()
     // Select and initialize the preconditioner based on precond_type.
     switch (precond_type)
     {
+    
     case 1:
-    { // BLOCK DIAGONAL preconditioner
-        auto block_diag_precondition = std::make_shared<PreconditionBlockDiagonal>();
-        block_diag_precondition->initialize(
-            lhs_matrix.block(0, 0),    // Velocity block (F_matrix)
-            pressure_mass.block(1, 1), // Pressure block (mass matrix)
-            maxiter_inner,             // Maximum iterations for inner solves
-            tol_inner,                 // Tolerance for inner solves
-            use_ilu);
-        block_precondition = block_diag_precondition;
-        break;
-    }
-    case 2:
     { // SIMPLE preconditioner
         auto simple_precondition = std::make_shared<PreconditionSIMPLE>();
         simple_precondition->initialize(
@@ -504,23 +492,30 @@ void MonolithicNavierStokes<dim>::solve_time_step()
         block_precondition = simple_precondition;
         break;
     }
-    case 3:
+    case 2:
     { // ASIMPLE preconditioner
         auto asimple_precondition = std::make_shared<PreconditionaSIMPLE>();
         asimple_precondition->initialize(
-            lhs_matrix.block(0, 0), lhs_matrix.block(1, 0),
-            lhs_matrix.block(0, 1), solution_owned, alpha,
-            use_inner_solver, maxiter_inner,
-            tol_inner, use_ilu);
+            lhs_matrix.block(0, 0), 
+            lhs_matrix.block(1, 0),
+            lhs_matrix.block(0, 1), 
+            solution_owned, 
+            alpha,
+            maxiter_inner,
+            tol_inner, 
+            use_ilu);
         block_precondition = asimple_precondition;
         break;
     }
-    case 4:
+    case 3:
     { // YOSIDA preconditioner
         auto yosida_precondition = std::make_shared<PreconditionYosida>();
         yosida_precondition->initialize(
-            lhs_matrix.block(0, 0), lhs_matrix.block(1, 0),
-            lhs_matrix.block(0, 1), velocity_mass.block(0, 0), solution_owned,
+            lhs_matrix.block(0, 0), 
+            lhs_matrix.block(1, 0),
+            lhs_matrix.block(0, 1), 
+            velocity_mass.block(0, 0), 
+            solution_owned,
             maxiter_inner,
             tol_inner,
             use_ilu);
@@ -558,10 +553,11 @@ void MonolithicNavierStokes<dim>::solve()
 
         // if i know the exact solution:
         //  exact_solution.set_time(time);
+
+        // if not, apply initial_condition
         VectorTools::interpolate(dof_handler, initial_condition, solution_owned);
         solution = solution_owned;
 
-        // if not, apply initial_condition
 
         // Output the initial solution.
         // output(0);
@@ -583,7 +579,6 @@ void MonolithicNavierStokes<dim>::solve()
         add_convective_term();
         assemble_rhs();
         solve_time_step();
-
         output(time_step);
     }
 }

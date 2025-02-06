@@ -213,119 +213,32 @@ public:
   virtual ~BlockPrecondition() = default;
   virtual void vmult(TrilinosWrappers::MPI::BlockVector &dst,
                      const TrilinosWrappers::MPI::BlockVector &src) const = 0;
-};
-
-/**
- * Block-diagonal preconditioner for Navier–Stokes or Stokes:
- * Each diagonal block (velocity, pressure) uses an inner preconditioner
- * that can be ILU or AMG. We provide two “initialize” methods.
- */
-
-class PreconditionBlockDiagonal : public BlockPrecondition
-{
-public:
-  /**
-   * ILU-based initialization for both velocity and pressure blocks.
-   */
-//   // Block-diagonal preconditioner.
-// Adapted from the one proposed for the Stokes problem in laboratory 9.
+protected:
   void initialize_inner_preconditioner(
         std::shared_ptr<TrilinosWrappers::PreconditionBase> &preconditioner,
-        const TrilinosWrappers::SparseMatrix &matrix, bool use_ilu) {
-    if (use_ilu) {
-        std::shared_ptr<TrilinosWrappers::PreconditionILU> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionILU>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    } else {
-        std::shared_ptr<TrilinosWrappers::PreconditionAMG> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionAMG>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    }
-    }
-
-
-  // Initialize the preconditioner.
-  void initialize(const TrilinosWrappers::SparseMatrix &velocity_stiffness_,
-                  const TrilinosWrappers::SparseMatrix &pressure_mass_,
-                  const unsigned int &maxit_, const double &tol_,
-                  const bool &use_ilu)
-  {
-  maxit = maxit_;
-  tol = tol_;
-  // Save a reference to the input matrices.
-  velocity_stiffness = &velocity_stiffness_;
-  pressure_mass = &pressure_mass_;
-
-  // Initialize the preconditioners.
-  initialize_inner_preconditioner(preconditioner_velocity, *velocity_stiffness,
-                                  use_ilu);
-  initialize_inner_preconditioner(preconditioner_pressure, *pressure_mass,
-                                  use_ilu);
-}
-
-  // Application of the preconditioner.
-  void vmult(TrilinosWrappers::MPI::BlockVector &dst,
-             const TrilinosWrappers::MPI::BlockVector &src) const override
-
-  {
-  // Solve the top-left block.
-  SolverControl solver_control_velocity(maxit, tol * src.block(0).l2_norm());
-  SolverGMRES<TrilinosWrappers::MPI::Vector> solver_gmres_velocity(
-      solver_control_velocity);
-  solver_gmres_velocity.solve(*velocity_stiffness, dst.block(0), src.block(0),
-                              *preconditioner_velocity);
-
-  // Solve the bottom-right block.
-  SolverControl solver_control_pressure(maxit, tol * src.block(1).l2_norm());
-  SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_pressure(
-      solver_control_pressure);
-  solver_cg_pressure.solve(*pressure_mass, dst.block(1), src.block(1),
-                           *preconditioner_pressure);
-  }
-
-
- private:
-  // Velocity stiffness matrix.
-  const TrilinosWrappers::SparseMatrix *velocity_stiffness;
-
-  // Preconditioner used for the velocity block.
-  std::shared_ptr<TrilinosWrappers::PreconditionBase> preconditioner_velocity;
-
-  // Pressure mass matrix.
-  const TrilinosWrappers::SparseMatrix *pressure_mass;
-
-  // Preconditioner used for the pressure block.
-  std::shared_ptr<TrilinosWrappers::PreconditionBase> preconditioner_pressure;
-
-  // Maximum number of iterations for the inner solvers.
-  unsigned int maxit;
-
-  // Tolerance for the inner solvers.
-  double tol;
+        const TrilinosWrappers::SparseMatrix &matrix, bool use_ilu) 
+        {
+            if (use_ilu) {
+                std::shared_ptr<TrilinosWrappers::PreconditionILU> actual_preconditioner =
+                    std::make_shared<TrilinosWrappers::PreconditionILU>();
+                actual_preconditioner->initialize(matrix);
+                preconditioner = actual_preconditioner;
+            } 
+            else 
+            {
+                std::shared_ptr<TrilinosWrappers::PreconditionAMG> actual_preconditioner =
+                    std::make_shared<TrilinosWrappers::PreconditionAMG>();
+                actual_preconditioner->initialize(matrix);
+                preconditioner = actual_preconditioner;
+            }
+        }
 };
+
 
 
 // SIMPLE preconditioner.
 class PreconditionSIMPLE : public BlockPrecondition {
  public:
-
-    void initialize_inner_preconditioner(
-        std::shared_ptr<TrilinosWrappers::PreconditionBase> &preconditioner,
-        const TrilinosWrappers::SparseMatrix &matrix, bool use_ilu) {
-    if (use_ilu) {
-        std::shared_ptr<TrilinosWrappers::PreconditionILU> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionILU>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    } else {
-        std::shared_ptr<TrilinosWrappers::PreconditionAMG> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionAMG>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    }
-    }
 
   // Initialize the preconditioner.
   void initialize(const TrilinosWrappers::SparseMatrix &F_matrix_,
@@ -334,33 +247,35 @@ class PreconditionSIMPLE : public BlockPrecondition {
                   const TrilinosWrappers::MPI::BlockVector &vec,
                   const double &alpha_, const unsigned int &maxit_,
                   const double &tol_, const bool &use_ilu)
-    {
-  alpha = alpha_;
-  maxit = maxit_;
-  tol = tol_;
-  // Save a reference to the input matrices.
-  F_matrix = &F_matrix_;
-  negB_matrix = &negB_matrix_;
-  Bt_matrix = &Bt_matrix_;
+  {
+    alpha = alpha_;
+    maxit = maxit_;
+    tol = tol_;
+    // Save a reference to the input matrices.
+    F_matrix = &F_matrix_;
+    negB_matrix = &negB_matrix_;
+    Bt_matrix = &Bt_matrix_;
 
-  // Save the negated inverse diagonal of F.
-  negDinv_vector.reinit(vec.block(0));
-  for (unsigned int index : negDinv_vector.locally_owned_elements()) {
-    negDinv_vector[index] = -1.0 / F_matrix->diag_element(index);
-  }
+    // Save the negated inverse diagonal of F.
+    negDinv_vector.reinit(vec.block(0));
+    for (unsigned int index : negDinv_vector.locally_owned_elements()) 
+    {
+        negDinv_vector[index] = -1.0 / F_matrix->diag_element(index);
+    }
 
   // Create the matrix S.
   negB_matrix->mmult(S_matrix, *Bt_matrix, negDinv_vector);
 
   // Initialize the preconditioners.
-  initialize_inner_preconditioner(preconditioner_F, *F_matrix, use_ilu);
-  initialize_inner_preconditioner(preconditioner_S, S_matrix, use_ilu);
+  this->initialize_inner_preconditioner(preconditioner_F, *F_matrix, use_ilu);
+  this->initialize_inner_preconditioner(preconditioner_S, S_matrix, use_ilu);
 }
 
-  // Application of the preconditioner.
-  void vmult(
-    TrilinosWrappers::MPI::BlockVector &dst,
-    const TrilinosWrappers::MPI::BlockVector &src) const {
+// Application of the preconditioner.
+void vmult(
+TrilinosWrappers::MPI::BlockVector &dst,
+const TrilinosWrappers::MPI::BlockVector &src) const 
+{
   tmp.reinit(src);
   // Step 1: solve [F 0; B -S]sol1 = src.
   // Step 1.1: solve F*sol1_u = src_u.
@@ -423,34 +338,17 @@ class PreconditionSIMPLE : public BlockPrecondition {
 
 // aSIMPLE preconditioner.
 class PreconditionaSIMPLE : public BlockPrecondition {
- public:
-
- void initialize_inner_preconditioner(
-        std::shared_ptr<TrilinosWrappers::PreconditionBase> &preconditioner,
-        const TrilinosWrappers::SparseMatrix &matrix, bool use_ilu) {
-    if (use_ilu) {
-        std::shared_ptr<TrilinosWrappers::PreconditionILU> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionILU>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    } else {
-        std::shared_ptr<TrilinosWrappers::PreconditionAMG> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionAMG>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    }
-    }
+public:
 
 void initialize(
     const TrilinosWrappers::SparseMatrix &F_matrix_,
     const TrilinosWrappers::SparseMatrix &negB_matrix_,
     const TrilinosWrappers::SparseMatrix &Bt_matrix_,
     const TrilinosWrappers::MPI::BlockVector &vec, const double &alpha_,
-    const bool &use_inner_solver_, const unsigned int &maxit_,
+    const unsigned int &maxit_,
     const double &tol_, const bool &use_ilu) 
 {
   alpha = alpha_;
-  use_inner_solver = use_inner_solver_;
   maxit = maxit_;
   tol = tol_;
   // Save a reference to the input matrices.
@@ -471,43 +369,38 @@ void initialize(
   negB_matrix->mmult(negS_matrix, *Bt_matrix, Dinv_vector);
 
   // Initialize the preconditioners.
-  initialize_inner_preconditioner(preconditioner_F, *F_matrix, use_ilu);
-  initialize_inner_preconditioner(preconditioner_S, negS_matrix, use_ilu);
+  this->initialize_inner_preconditioner(preconditioner_F, *F_matrix, use_ilu);
+  this->initialize_inner_preconditioner(preconditioner_S, negS_matrix, use_ilu);
 }
 
 
-  // Application of the preconditioner.
-  void vmult(TrilinosWrappers::MPI::BlockVector &dst,
-             const TrilinosWrappers::MPI::BlockVector &src) const 
-  {
+// Application of the preconditioner.
+void vmult(TrilinosWrappers::MPI::BlockVector &dst,
+            const TrilinosWrappers::MPI::BlockVector &src) const 
+{
   tmp.reinit(src);
   // Step 1: multiply src by [F^-1 0; 0 I].
-  if (use_inner_solver) {
+
     SolverControl solver_control_F(maxit, tol * src.block(0).l2_norm());
     SolverGMRES<TrilinosWrappers::MPI::Vector> solver_F(solver_control_F);
     solver_F.solve(*F_matrix, dst.block(0), src.block(0), *preconditioner_F);
-  } else {
-    preconditioner_F->vmult(dst.block(0), src.block(0));
-  }
-  tmp.block(1) = src.block(1);
-  // Step 2: multiply the result by [I 0; -B I].
-  negB_matrix->vmult_add(tmp.block(1), dst.block(0));
-  // Step 3: multiply the result by [I 0; 0 -S^-1].
-  if (use_inner_solver) {
+    tmp.block(1) = src.block(1);
+    // Step 2: multiply the result by [I 0; -B I].
+    negB_matrix->vmult_add(tmp.block(1), dst.block(0));
+    // Step 3: multiply the result by [I 0; 0 -S^-1].
+
     SolverControl solver_control_S(maxit, tol * tmp.block(1).l2_norm());
     SolverGMRES<TrilinosWrappers::MPI::Vector> solver_S(solver_control_S);
     solver_S.solve(negS_matrix, dst.block(1), tmp.block(1), *preconditioner_S);
-  } else {
-    preconditioner_S->vmult(dst.block(1), tmp.block(1));
-  }
-  // Step 4: multiply the result by [D 0; 0 I/alpha].
-  dst.block(0).scale(D_vector);
-  dst.block(1) /= alpha;
-  // Step 5: multiply the result by [I -B^T; 0 I].
-  Bt_matrix->vmult(tmp.block(0), dst.block(1));
-  dst.block(0) -= tmp.block(0);
-  // Step 6: multiply the result by [D^-1 0; 0 I].
-  dst.block(0).scale(Dinv_vector);
+  
+    // Step 4: multiply the result by [D 0; 0 I/alpha].
+    dst.block(0).scale(D_vector);
+    dst.block(1) /= alpha;
+    // Step 5: multiply the result by [I -B^T; 0 I].
+    Bt_matrix->vmult(tmp.block(0), dst.block(1));
+    dst.block(0) -= tmp.block(0);
+    // Step 6: multiply the result by [D^-1 0; 0 I].
+    dst.block(0).scale(Dinv_vector);
 }
 
  private:
@@ -541,8 +434,7 @@ void initialize(
   // Temporary vector.
   mutable TrilinosWrappers::MPI::BlockVector tmp;
 
-  // Whether to use inner solvers.
-  bool use_inner_solver;
+
 
   // Maximum number of iterations for the inner solvers.
   unsigned int maxit;
@@ -556,22 +448,6 @@ void initialize(
 class PreconditionYosida : public BlockPrecondition {
  public:
 
- void initialize_inner_preconditioner(
-        std::shared_ptr<TrilinosWrappers::PreconditionBase> &preconditioner,
-        const TrilinosWrappers::SparseMatrix &matrix, bool use_ilu) {
-    if (use_ilu) {
-        std::shared_ptr<TrilinosWrappers::PreconditionILU> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionILU>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    } else {
-        std::shared_ptr<TrilinosWrappers::PreconditionAMG> actual_preconditioner =
-            std::make_shared<TrilinosWrappers::PreconditionAMG>();
-        actual_preconditioner->initialize(matrix);
-        preconditioner = actual_preconditioner;
-    }
-    }
-
   // Initialize the preconditioner.
   void initialize(const TrilinosWrappers::SparseMatrix &F_matrix_,
                   const TrilinosWrappers::SparseMatrix &negB_matrix_,
@@ -580,55 +456,56 @@ class PreconditionYosida : public BlockPrecondition {
                   const TrilinosWrappers::MPI::BlockVector &vec,
                   const unsigned int &maxit_, const double &tol_,
                   const bool &use_ilu)
+  {
+    maxit = maxit_;
+    tol = tol_;
+    // Save a reference to the input matrices.
+    F_matrix = &F_matrix_;
+    negB_matrix = &negB_matrix_;
+    Bt_matrix = &Bt_matrix_;
+
+    // Save the inverse diagonal of M_dt.
+    Dinv_vector.reinit(vec.block(0));
+    for (unsigned int index : Dinv_vector.locally_owned_elements()) 
     {
-  maxit = maxit_;
-  tol = tol_;
-  // Save a reference to the input matrices.
-  F_matrix = &F_matrix_;
-  negB_matrix = &negB_matrix_;
-  Bt_matrix = &Bt_matrix_;
+        Dinv_vector[index] = 1.0 / M_dt_matrix_.diag_element(index);
+    }
 
-  // Save the inverse diagonal of M_dt.
-  Dinv_vector.reinit(vec.block(0));
-  for (unsigned int index : Dinv_vector.locally_owned_elements()) {
-    Dinv_vector[index] = 1.0 / M_dt_matrix_.diag_element(index);
-  }
+    // Create the matrix -S.
+    negB_matrix->mmult(negS_matrix, *Bt_matrix, Dinv_vector);
 
-  // Create the matrix -S.
-  negB_matrix->mmult(negS_matrix, *Bt_matrix, Dinv_vector);
-
-  // Initialize the preconditioners.
-  initialize_inner_preconditioner(preconditioner_F, *F_matrix, use_ilu);
-  initialize_inner_preconditioner(preconditioner_S, negS_matrix, use_ilu);
-}
+    // Initialize the preconditioners.
+    this->initialize_inner_preconditioner(preconditioner_F, *F_matrix, use_ilu);
+    this->initialize_inner_preconditioner(preconditioner_S, negS_matrix, use_ilu);
+ }
 
   // Application of the preconditioner.
   void vmult(TrilinosWrappers::MPI::BlockVector &dst,
              const TrilinosWrappers::MPI::BlockVector &src) const
-    {
-  tmp.reinit(src);
-  // Step 1: solve [F 0; B -S]sol1 = src.
-  // Step 1.1: solve F*sol1_u = src_u.
-  tmp.block(0) = dst.block(0);
-  SolverControl solver_control_F(maxit, tol * src.block(0).l2_norm());
-  SolverGMRES<TrilinosWrappers::MPI::Vector> solver_F(solver_control_F);
-  solver_F.solve(*F_matrix, tmp.block(0), src.block(0), *preconditioner_F);
-  // Step 1.2: solve -S*sol1_p = -B*sol1_u + src_p.
-  tmp.block(1) = src.block(1);
-  negB_matrix->vmult_add(tmp.block(1), tmp.block(0));
-  SolverControl solver_control_S(maxit, tol * tmp.block(1).l2_norm());
-  SolverGMRES<TrilinosWrappers::MPI::Vector> solver_S(solver_control_S);
-  solver_S.solve(negS_matrix, dst.block(1), tmp.block(1), *preconditioner_S);
+  {
+    tmp.reinit(src);
+    // Step 1: solve [F 0; B -S]sol1 = src.
+    // Step 1.1: solve F*sol1_u = src_u.
+    tmp.block(0) = dst.block(0);
+    SolverControl solver_control_F(maxit, tol * src.block(0).l2_norm());
+    SolverGMRES<TrilinosWrappers::MPI::Vector> solver_F(solver_control_F);
+    solver_F.solve(*F_matrix, tmp.block(0), src.block(0), *preconditioner_F);
+    // Step 1.2: solve -S*sol1_p = -B*sol1_u + src_p.
+    tmp.block(1) = src.block(1);
+    negB_matrix->vmult_add(tmp.block(1), tmp.block(0));
+    SolverControl solver_control_S(maxit, tol * tmp.block(1).l2_norm());
+    SolverGMRES<TrilinosWrappers::MPI::Vector> solver_S(solver_control_S);
+    solver_S.solve(negS_matrix, dst.block(1), tmp.block(1), *preconditioner_S);
 
-  // Step 2: solve [I F^-1*B^T; 0 I]dst = sol1.
-  tmp_2 = src.block(0);
-  dst.block(0) = tmp.block(0);
-  Bt_matrix->vmult(tmp.block(0), dst.block(1));
-  SolverControl solver_control_F2(maxit, tol * tmp.block(0).l2_norm());
-  SolverGMRES<TrilinosWrappers::MPI::Vector> solver_gmres_F2(solver_control_F);
-  solver_gmres_F2.solve(*F_matrix, tmp_2, tmp.block(0), *preconditioner_F);
-  dst.block(0) -= tmp_2;
- }
+    // Step 2: solve [I F^-1*B^T; 0 I]dst = sol1.
+    tmp_2 = src.block(0);
+    dst.block(0) = tmp.block(0);
+    Bt_matrix->vmult(tmp.block(0), dst.block(1));
+    SolverControl solver_control_F2(maxit, tol * tmp.block(0).l2_norm());
+    SolverGMRES<TrilinosWrappers::MPI::Vector> solver_gmres_F2(solver_control_F);
+    solver_gmres_F2.solve(*F_matrix, tmp_2, tmp.block(0), *preconditioner_F);
+    dst.block(0) -= tmp_2;
+   }
 
 
  private:
@@ -671,161 +548,162 @@ class PreconditionYosida : public BlockPrecondition {
 /*****************************************************************/
 /*****************************************************************/
 
-    // Initialization.
-    void
-    setup();
+// Initialization.
+void
+setup();
 
-    // Solve the problem.
-    void
-    solve();
+// Solve the problem.
+void
+solve();
 
-    // Compute the error.
-    double
-    compute_error(const VectorTools::NormType &norm_type);
+// Compute the error.
+double
+compute_error(const VectorTools::NormType &norm_type);
 
-    std::string
-    get_output_directory();
+std::string
+get_output_directory();
 
 protected:
     
-    void
-    assemble_base_matrix();
+void
+assemble_base_matrix();
 
-    void
-    add_convective_term();
+void
+add_convective_term();
 
-    // Assemble the right-hand side of the problem.
-    void
-    assemble_rhs();
+// Assemble the right-hand side of the problem.
+void
+assemble_rhs();
 
-    // Solve the problem for one time step.
-    void
-    solve_time_step();
+// Solve the problem for one time step.
+void
+solve_time_step();
 
-    // Output.
-    void
-    output(const unsigned int &time_step);
+// Output.
+void
+output(const unsigned int &time_step);
 
-    void
-    set_initial_conditions(TrilinosWrappers::MPI::BlockVector solution_stokes_);
+void
+set_initial_conditions(TrilinosWrappers::MPI::BlockVector solution_stokes_);
 
-    // Number of MPI processes.
-    const unsigned int mpi_size;
+// Number of MPI processes.
+const unsigned int mpi_size;
 
-    // This MPI process.
-    const unsigned int mpi_rank;
+// This MPI process.
+const unsigned int mpi_rank;
 
-    // Parallel output stream.
-    ConditionalOStream pcout; 
+// Parallel output stream.
+ConditionalOStream pcout; 
 
-    // Height of the channel.
-    const double H = 0.41;
+// Height of the channel.
+const double H = 0.41;
 
-    // Cylinder radius.
-    const double cylinder_radius = 0.1;
+// Cylinder radius.
+const double cylinder_radius = 0.1;
 
-    // outlet pressure
-    const double p_out = 0.0;
+// outlet pressure
+const double p_out = 0.0;
 
-    // Mesh file name.
-    const std::string mesh_file_name;
+// Mesh file name.
+const std::string mesh_file_name;
 
-    // Polynomial degree Velocity.
-    const unsigned int degree_velocity;
+// Polynomial degree Velocity.
+const unsigned int degree_velocity;
 
-    // Polynomial degree Pressure.
-    const unsigned int degree_pressure;
-    
-    // Final time.
-    const double T;
+// Polynomial degree Pressure.
+const unsigned int degree_pressure;
 
-    // Time step.
-    const double deltat;
+// Final time.
+const double T;
 
-    // Inlet velocity.
-    InletVelocity inlet_velocity;
+// Time step.
+const double deltat;
 
-    // extractors for velocity and pressure.
-    FEValuesExtractors::Vector velocity;
+// Inlet velocity.
+InletVelocity inlet_velocity;
 
-    FEValuesExtractors::Scalar pressure;
-    
-    // Mesh.
-    parallel::fullydistributed::Triangulation<dim> mesh;
+// extractors for velocity and pressure.
+FEValuesExtractors::Vector velocity;
 
-    // Reynolds number.
-    const double reynolds_number;
+FEValuesExtractors::Scalar pressure;
 
-    // Affine constraints.
-    AffineConstraints<double> constraints;
+// Mesh.
+parallel::fullydistributed::Triangulation<dim> mesh;
 
-    // diffusion coefficient
-    double nu;
+// Reynolds number.
+const double reynolds_number;
 
-    // Forcing term.
-    ForcingTerm forcing_term;
+// Affine constraints.
+AffineConstraints<double> constraints;
 
-    // Function for neuman condition
-    Function_Neumann neumann_condition;
+// diffusion coefficient
+double nu;
 
-    // Function for the initial condition
-    Function_u0 initial_condition;
+// Forcing term.
+ForcingTerm forcing_term;
 
-    // Current time.
-    double time;
+// Function for neuman condition
+Function_Neumann neumann_condition;
 
-    double lift; 
+// Function for the initial condition
+Function_u0 initial_condition;
 
-    double drag;
+// Current time.
+double time;
 
-    const double rho = 1.0;
+double lift; 
 
-    // Finite element space.
-    std::unique_ptr<FiniteElement<dim>> fe;
+double drag;
 
-    // Quadrature formula.
-    std::unique_ptr<Quadrature<dim>> quadrature;
+const double rho = 1.0;
 
-    // Quadrature formula used on boundary lines.
-    std::unique_ptr<Quadrature<dim - 1>> quadrature_face;
+// Finite element space.
+std::unique_ptr<FiniteElement<dim>> fe;
 
-    // DoF handler.
-    DoFHandler<dim> dof_handler;
+// Quadrature formula.
+std::unique_ptr<Quadrature<dim>> quadrature;
 
-    // DoFs owned by current process.
-    IndexSet locally_owned_dofs;
+// Quadrature formula used on boundary lines.
+std::unique_ptr<Quadrature<dim - 1>> quadrature_face;
 
-    std::vector<IndexSet> block_owned_dofs; //!!!!!!!!!!!!!!!!!!
+// DoF handler.
+DoFHandler<dim> dof_handler;
 
-    // DoFs relevant to the current process (including ghost DoFs).
-    IndexSet locally_relevant_dofs;
+// DoFs owned by current process.
+IndexSet locally_owned_dofs;
 
-    std::vector<IndexSet> block_relevant_dofs; //!!!!!!!!!!!!!!!!!!
+std::vector<IndexSet> block_owned_dofs; 
 
-    // Time independent matrix
-    TrilinosWrappers::BlockSparseMatrix system_matrix;
+// DoFs relevant to the current process (including ghost DoFs).
+IndexSet locally_relevant_dofs;
 
-    // velocity mass.
-    TrilinosWrappers::BlockSparseMatrix velocity_mass;
+std::vector<IndexSet> block_relevant_dofs; 
 
-    // Complete matrix.
-    TrilinosWrappers::BlockSparseMatrix lhs_matrix;
+// Time independent matrix
+TrilinosWrappers::BlockSparseMatrix system_matrix;
 
-    TrilinosWrappers::BlockSparseMatrix pressure_mass;  //!
+// velocity mass.
+TrilinosWrappers::BlockSparseMatrix velocity_mass;
 
-    // Right-hand side vector in the linear system.
-    TrilinosWrappers::MPI::BlockVector system_rhs;
+// Complete matrix.
+TrilinosWrappers::BlockSparseMatrix lhs_matrix;
 
-    // System solution (without ghost elements).
-    TrilinosWrappers::MPI::BlockVector solution_owned;
+TrilinosWrappers::BlockSparseMatrix pressure_mass;  
 
-    // System solution (including ghost elements).
-    TrilinosWrappers::MPI::BlockVector solution;
+// Right-hand side vector in the linear system.
+TrilinosWrappers::MPI::BlockVector system_rhs;
 
-    std::vector<double> vec_drag;
-    std::vector<double> vec_lift;
-    std::vector<double> vec_drag_coeff;
-    std::vector<double> vec_lift_coeff;
+// System solution (without ghost elements).
+TrilinosWrappers::MPI::BlockVector solution_owned;
+
+// System solution (including ghost elements).
+TrilinosWrappers::MPI::BlockVector solution;
+
+std::vector<double> vec_drag;
+std::vector<double> vec_lift;
+std::vector<double> vec_drag_coeff;
+std::vector<double> vec_lift_coeff;
+
 };
 
 #endif
