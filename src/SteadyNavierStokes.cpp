@@ -851,7 +851,7 @@ void NonLinearCorrection<dim>::output()
   std::string numProcessors = std::to_string(this->mpi_size);
   numProcessors += (this->mpi_size == 1) ? "_processor" : "_processors";
 
-  const std::string output_file_name = "output-NonLinearCorrection-" + numProcessors;
+  const std::string output_file_name = "NonLinearCorrection-" + numProcessors;
   data_out.write_vtu_with_pvtu_record(this->get_output_directory(),
                                       output_file_name,
                                       0,
