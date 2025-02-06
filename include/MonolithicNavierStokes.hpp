@@ -541,6 +541,142 @@ class PreconditionYosida : public BlockPrecondition {
   double tol;
 };
 
+class PreconditionaYosida : public BlockPrecondition {
+public:
+  void initialize_inner_preconditioner(
+      std::shared_ptr<TrilinosWrappers::PreconditionBase> &preconditioner,
+      const TrilinosWrappers::SparseMatrix &matrix, bool use_ilu)
+  {
+    if (use_ilu)
+    {
+      auto actual_preconditioner =
+          std::make_shared<TrilinosWrappers::PreconditionILU>();
+      actual_preconditioner->initialize(matrix);
+      preconditioner = actual_preconditioner;
+    }
+    else
+    {
+      auto actual_preconditioner =
+          std::make_shared<TrilinosWrappers::PreconditionAMG>();
+      actual_preconditioner->initialize(matrix);
+      preconditioner = actual_preconditioner;
+    }
+  }
+
+  void initialize(const TrilinosWrappers::SparseMatrix &C_matrix_,
+                  const TrilinosWrappers::SparseMatrix &B_matrix_,
+                  const TrilinosWrappers::SparseMatrix &Bt_matrix_,
+                  const TrilinosWrappers::MPI::BlockVector &vec,
+                  const double &alpha_,
+                  const unsigned int &maxit_,
+                  const double &tol_,
+                  const bool &use_ilu)
+  {
+    alpha    = alpha_;
+    maxit    = maxit_;
+    tol      = tol_;
+
+    C_matrix  = &C_matrix_;
+    B_matrix  = &B_matrix_;
+    Bt_matrix = &Bt_matrix_;
+
+    // Extract diagonal of C and its inverse
+    D_vector.reinit(vec.block(0));
+    Dinv_vector.reinit(vec.block(0));
+    for (unsigned int i : D_vector.locally_owned_elements())
+    {
+      const double val = C_matrix->diag_element(i);
+      D_vector[i]    = val;
+      Dinv_vector[i] = 1.0 / val;
+    }
+
+    // Build the lumped Schur matrix: -S_lumped = -B * D^-1 * B^T
+    B_matrix->mmult(negS_lumped_matrix, *Bt_matrix, Dinv_vector);
+
+    // Build the preconditioners for the velocity block (C) and the Schur block
+    this->initialize_inner_preconditioner(preconditioner_C, *C_matrix, use_ilu);
+    this->initialize_inner_preconditioner(preconditioner_S, negS_lumped_matrix, use_ilu);
+  }
+
+  void vmult(TrilinosWrappers::MPI::BlockVector &dst,
+             const TrilinosWrappers::MPI::BlockVector &src) const override
+  {
+    // A temp vector for intermediate steps
+    tmp.reinit(src);
+
+    // Step 1: Apply (C^-1  0;  0  I)
+    {
+      SolverControl solver_control_C(maxit, tol * src.block(0).l2_norm());
+      SolverGMRES<TrilinosWrappers::MPI::Vector> solver_C(solver_control_C);
+      solver_C.solve(*C_matrix, dst.block(0), src.block(0), *preconditioner_C);
+
+      // Copy block(1)
+      dst.block(1) = src.block(1);
+    }
+
+    // Step 2: Apply (I  -B^T; 0  I) => x := x - B^T y
+    {
+      TrilinosWrappers::MPI::Vector temp_x(dst.block(0)); 
+      Bt_matrix->vmult(temp_x, dst.block(1));  // temp_x = B^T * y
+      dst.block(0) -= temp_x;                 // x := x - temp_x
+    }
+
+    // Step 3: Apply (C   0; 0  I) => x := C x
+    {
+      TrilinosWrappers::MPI::Vector old_x(dst.block(0));
+      C_matrix->vmult(dst.block(0), old_x);
+    }
+
+    // Step 4: Apply (I  0; 0  -S^-1)
+    {
+      SolverControl solver_control_S(maxit, tol * dst.block(1).l2_norm());
+      SolverGMRES<TrilinosWrappers::MPI::Vector> solver_S(solver_control_S);
+      solver_S.solve(negS_lumped_matrix,
+                     dst.block(1),   // solution
+                     dst.block(1),   // rhs
+                     *preconditioner_S);
+    }
+
+    // Step 5: Apply (I  -B; 0  I) => y := y - B x
+    {
+      TrilinosWrappers::MPI::Vector temp_y(dst.block(1));
+      B_matrix->vmult(temp_y, dst.block(0));  // temp_y = B * x
+      dst.block(1) -= temp_y;                // y := y - temp_y
+    }
+
+    // Step 6: Apply (C^-1  0; 0  I) again
+    {
+      SolverControl solver_control_C2(maxit, tol * dst.block(0).l2_norm());
+      SolverGMRES<TrilinosWrappers::MPI::Vector> solver_C2(solver_control_C2);
+      solver_C2.solve(*C_matrix, dst.block(0), dst.block(0), *preconditioner_C);
+    }
+  }
+
+private:
+  double alpha;
+  unsigned int maxit;
+  double tol;
+
+  // System matrices
+  const TrilinosWrappers::SparseMatrix *C_matrix;
+  const TrilinosWrappers::SparseMatrix *B_matrix;
+  const TrilinosWrappers::SparseMatrix *Bt_matrix;
+
+  // C’s diagonal and its inverse
+  TrilinosWrappers::MPI::Vector D_vector, Dinv_vector;
+
+  // Lumped Schur complement: -S_lumped = -B * D^-1 * B^T
+  TrilinosWrappers::SparseMatrix negS_lumped_matrix;
+
+  // Preconditioners
+  std::shared_ptr<TrilinosWrappers::PreconditionBase> preconditioner_C;
+  std::shared_ptr<TrilinosWrappers::PreconditionBase> preconditioner_S;
+
+  // Temporary storage
+  mutable TrilinosWrappers::MPI::BlockVector tmp;
+};
+
+
 
 /*****************************************************************/
 /*****************************************************************/
